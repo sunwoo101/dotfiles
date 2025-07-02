@@ -20,6 +20,7 @@ pacman_packages=(
 	xdg-user-dirs
 	xdg-user-dirs-gtk
 	ttf-jetbrains-mono-nerd
+	less
 )
 
 echo ">> Updating package database..."
