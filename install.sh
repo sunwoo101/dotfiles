@@ -62,4 +62,20 @@ for pkg in "${aur_packages[@]}"; do
 	fi
 done
 
+# nvidia
+read -p "Install NVIDIA drivers? (y/n): " install_nvidia
+
+if [[ "$install_nvidia" == "y" || "$install_nvidia" == "Y" || "$install_nvidia" == "yes" || "$install_nvidia" == "YES" ]]; then
+	echo "[+] Installing NVIDIA drivers..."
+	sudo pacman -S --needed --noconfirm nvidia-lts nvidia-utils nvidia-settings
+else
+	echo "[*] Skipping NVIDIA driver installation."
+fi
+
+# sddm
+sudo systemctl enable sddm
+
+# folders
+xdg-user-dirs-update
+
 echo "[!] Done"
