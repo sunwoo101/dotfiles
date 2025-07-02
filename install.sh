@@ -9,25 +9,32 @@ fi
 # pacman packages
 pacman_packages=(
 	linux-lts-headers
+	dkms
 	git
 	base-devel
 	hyprland
 	hyprlock
 	hypridle
 	hyprpaper
-	firefox
 	sddm
 	waybar
 	nwg-dock-hyprland
 	rofi
 	kitty
 	nano
+	vim
 	nvim
 	nautilus
 	xdg-user-dirs
 	xdg-user-dirs-gtk
 	ttf-jetbrains-mono-nerd
 	less
+	blueman
+	pavucontrol
+	gnome-calculator
+	network-manager-applet
+	loupe
+	celluloid
 )
 
 echo ">> Updating package database..."
@@ -58,6 +65,8 @@ fi
 # aur packages
 aur_packages=(
 	waypaper
+	wps-office
+	zen-browser-bin
 )
 
 for pkg in "${aur_packages[@]}"; do
@@ -143,6 +152,40 @@ else
 	echo "[*] Skipping NVIDIA driver installation."
 fi
 
+# install packages used by sun
+suns_pacman=(
+	spotify-launcher
+	discord
+)
+
+suns_aur=(
+	rtl8852au-dkms-git
+	visual-studio-code-bin
+)
+
+read -p "Install apps and packages used by sun? (y/n): " install_sun
+
+if [[ "$install_sun" == "y" || "$install_sun" == "Y" || "$install_sun" == "yes" || "$install_sun" == "YES" ]]; then
+	echo ">> Installing pacman packages..."
+	for pkg in "${suns_pacman[@]}; do
+	        if pacman -Qi "$pkg" &>/dev/null; then
+	                echo "[*] $pkg is already installed"
+	        else
+	                echo "[+] Installing $pkg..."
+	                sudo pacman -S --needed --noconfirm "$pkg"
+	        fi
+	done
+
+	for pkg in "${suns_aur[@]}"; do
+	        if yay -Qi "$pkg" &>/dev/null; do
+	                echo "[*] $pkg is already installed (AUR)"
+	        else
+	                echo "[+] Installing $pkg (AUR)..."
+	                yay -S --noconfirm "$pkg"
+	        fi
+	done
+fi
+
 # sddm
 sudo systemctl enable sddm
 
@@ -150,4 +193,5 @@ sudo systemctl enable sddm
 xdg-user-dirs-update
 
 echo "[!] Done"
+
 
