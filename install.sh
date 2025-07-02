@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# check if sudo
+if [ "$(id -u)" -ne 0 ]; then
+	echo "Please run as sudo."
+	exit 1
+fi
+
 # pacman packages
 pacman_packages=(
 	git
