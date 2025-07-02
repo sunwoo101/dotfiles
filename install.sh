@@ -36,6 +36,10 @@ pacman_packages=(
 	loupe
 	celluloid
 	jq
+	xdg-desktop-portal
+	xdg-desktop-portal-gtk
+	xdg-desktop-portal-hyprland
+	polkit-gnome
 )
 
 echo ">> Updating package database..."
