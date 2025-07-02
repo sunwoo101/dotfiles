@@ -1,1 +1,6 @@
-# My Dotfiles
+# My Hyprland Dotfiles
+
+To install on Arch:
+```bash
+./install
+```
