@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if pgrep -f "nwg-dock-hyprland" > /dev/null; then
-	killall nwg-dock-hyprland
+if pidof "waybar" > /dev/null; then
+	killall waybar
 else
-	~/.config/nwg-dock-hyprland/launch.sh
+	~/.config/waybar/launch.sh
 fi
