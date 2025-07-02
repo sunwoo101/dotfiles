@@ -35,6 +35,7 @@ pacman_packages=(
 	network-manager-applet
 	loupe
 	celluloid
+	jq
 )
 
 echo ">> Updating package database..."
