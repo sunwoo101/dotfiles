@@ -40,6 +40,7 @@ pacman_packages=(
 	xdg-desktop-portal-gtk
 	xdg-desktop-portal-hyprland
 	polkit-gnome
+	eza
 )
 
 echo ">> Updating package database..."
