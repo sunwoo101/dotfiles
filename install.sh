@@ -72,6 +72,7 @@ aur_packages=(
 	waypaper
 	wps-office
 	zen-browser-bin
+	oh-my-posh
 )
 
 for pkg in "${aur_packages[@]}"; do
@@ -196,6 +197,10 @@ sudo systemctl enable sddm
 
 # folders
 xdg-user-dirs-update
+
+# clear cache
+echo "[-] Clearing cache"
+yay -Sc --noconfirm
 
 echo "[!] Done"
 
