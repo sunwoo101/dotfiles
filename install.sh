@@ -41,6 +41,7 @@ pacman_packages=(
 	xdg-desktop-portal-hyprland
 	polkit-gnome
 	eza
+	swaync
 )
 
 echo ">> Updating package database..."
@@ -74,6 +75,7 @@ aur_packages=(
 	wps-office
 	zen-browser-bin
 	oh-my-posh
+	wlogout
 )
 
 for pkg in "${aur_packages[@]}"; do
