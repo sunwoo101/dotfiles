@@ -6,6 +6,16 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
+# warning
+echo "WARNING: This will overwrite existing config"
+read -p "Type 'yes' to continue: " confirm
+
+if [[ "$confirm" != "yes" ]]; then
+    echo "Aborted."
+    exit 1
+fi
+
+
 # pacman packages
 pacman_packages=(
 	linux-lts-headers
