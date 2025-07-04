@@ -42,6 +42,7 @@ pacman_packages=(
 	polkit-gnome
 	eza
 	swaync
+	hyprshot
 )
 
 echo ">> Updating package database..."
