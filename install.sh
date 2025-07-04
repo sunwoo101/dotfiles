@@ -49,7 +49,7 @@ echo ">> Updating package database..."
 sudo pacman -Syu --noconfirm
 
 echo ">> Installing packages..."
-for pkg in "${pacman_packages[@]}; do
+for pkg in "${pacman_packages[@]}"; do
 	if pacman -Qi "$pkg" &>/dev/null; then
 		echo "[*] $pkg is already installed"
 	else
@@ -153,7 +153,7 @@ if [[ "$install_nvidia" == "y" || "$install_nvidia" == "Y" || "$install_nvidia" 
 
 	sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null <<EOF
 	blacklist nouveau
-	options nouveau modeset-0
+	options nouveau modeset=0
 	EOF
 
 	sudo mkinitcpio -P
@@ -176,7 +176,7 @@ read -p "Install apps and packages used by sun? (y/n): " install_sun
 
 if [[ "$install_sun" == "y" || "$install_sun" == "Y" || "$install_sun" == "yes" || "$install_sun" == "YES" ]]; then
 	echo ">> Installing pacman packages..."
-	for pkg in "${suns_pacman[@]}; do
+	for pkg in "${suns_pacman[@]}"; do
 	        if pacman -Qi "$pkg" &>/dev/null; then
 	                echo "[*] $pkg is already installed"
 	        else
@@ -198,7 +198,8 @@ fi
 # install dotfiles
 cp -r home/. ~/
 cp -r dotconfig/. ~/.config/
-cd rm -rf dotfiles/
+cd
+rm -rf dotfiles/
 
 # sddm
 sudo systemctl enable sddm
