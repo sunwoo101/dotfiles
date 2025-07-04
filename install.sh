@@ -196,7 +196,7 @@ if [[ "$install_sun" == "y" || "$install_sun" == "Y" || "$install_sun" == "yes" 
 	done
 
 	for pkg in "${suns_aur[@]}"; do
-	        if yay -Qi "$pkg" &>/dev/null; do
+	        if yay -Qi "$pkg" &>/dev/null; then
 	                echo "[*] $pkg is already installed (AUR)"
 	        else
 	                echo "[+] Installing $pkg (AUR)..."
