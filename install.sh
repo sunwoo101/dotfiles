@@ -49,6 +49,7 @@ pacman_packages=(
 	hyprshot
 	nwg-drawer
 	fastfetch
+	locate
 )
 
 echo ">> Updating package database..."
@@ -202,8 +203,9 @@ else
 fi
 
 # install dotfiles
-cp -a home/. ~/
-cp -a dotconfig/. ~/.config/
+mkdir ~/.config
+cp -a ~/dotfiles/home/. ~/
+cp -a ~/dotfiles/dotconfig/. ~/.config/
 cd
 rm -rf dotfiles/
 
