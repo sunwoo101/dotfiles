@@ -206,8 +206,8 @@ if [[ "$install_sun" == "y" || "$install_sun" == "Y" || "$install_sun" == "yes" 
 fi
 
 # install dotfiles
-cp -r home/. ~/
-cp -r dotconfig/. ~/.config/
+cp -a home/. ~/
+cp -a dotconfig/. ~/.config/
 cd
 rm -rf dotfiles/
 
