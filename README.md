@@ -17,10 +17,5 @@ cd ~/dotfiles
 
 3.
 ```bash
-chmod +x install.sh
-```
-
-4.
-```bash
 ./install.sh
 ```
