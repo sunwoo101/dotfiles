@@ -195,6 +195,11 @@ if [[ "$install_sun" == "y" || "$install_sun" == "Y" || "$install_sun" == "yes" 
 	done
 fi
 
+# install dotfiles
+cp -r home/. ~/
+cp -r dotconfig/. ~/.config/
+cd rm -rf dotfiles/
+
 # sddm
 sudo systemctl enable sddm
 
