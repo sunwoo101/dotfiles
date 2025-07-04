@@ -223,4 +223,14 @@ yay -Sc --noconfirm
 
 echo "[!] Done"
 
-
+# restart
+read -p "Do you want to restart now? [y/N]: " restart
+case "$restart" in
+    [yY][eE][sS]|[yY])
+        echo "Rebooting..."
+        reboot
+        ;;
+    *)
+        echo "Skipped restart."
+        ;;
+esac
