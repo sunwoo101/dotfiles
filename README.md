@@ -6,5 +6,5 @@ Do not use yet
 
 To install on Arch:
 ```bash
-./install
+git clone https://github.com/sunwoo101/dotfiles.git ~/dotfiles && cd ~/dotfiles && chmod +x install.sh && ./install.sh
 ```
