@@ -89,7 +89,7 @@ aur_packages=(
 )
 
 for pkg in "${aur_packages[@]}"; do
-	if yay -Qi "$pkg" &>/dev/null; do
+	if yay -Qi "$pkg" &>/dev/null; then
 		echo "[*] $pkg is already installed (AUR)"
 	else
 		echo "[+] Installing $pkg (AUR)..."
