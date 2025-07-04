@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# check if sudo
-if [ "$(id -u)" -ne 0 ]; then
-	echo "Please run as sudo."
-	exit 1
-fi
-
 # warning
 echo "WARNING: This will overwrite existing config"
 read -p "Type 'yes' to continue: " confirm
@@ -97,80 +91,6 @@ for pkg in "${aur_packages[@]}"; do
 	fi
 done
 
-# nvidia
-read -p "Install NVIDIA drivers? (y/n): " install_nvidia
-
-if [[ "$install_nvidia" == "y" || "$install_nvidia" == "Y" || "$install_nvidia" == "yes" || "$install_nvidia" == "YES" ]]; then
-	echo "[+] Installing NVIDIA drivers..."
-	sudo pacman -S --needed --noconfirm nvidia-lts nvidia-utils nvidia-settings
-	
-	# Create the suspend-hyprland.sh script
-	cat > /usr/local/bin/suspend-hyprland.sh << 'EOF'
-#!/bin/bash
-
-case "$1" in
-	suspend)
-		killall -STOP Hyprland
-		;;
-	resume)
-		killall -CONT Hyprland
-		;;
-esac
-EOF
-
-	# Make the script executable
-	chmod +x /usr/local/bin/suspend-hyprland.sh
-
-	# Create the hyprland-suspend.service systemd service file
-	cat > /etc/systemd/system/hyprland-suspend.service << 'EOF'
-[Unit]
-Description=Suspend hyprland
-Before=systemd-suspend.service
-Before=systemd-hibernate.service
-Before=nvidia-suspend.service
-Before=nvidia-hibernate.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/suspend-hyprland.sh suspend
-
-[Install]
-WantedBy=systemd-suspend.service
-WantedBy=systemd-hibernate.service
-EOF
-
-	# Create the hyprland-resume.service systemd service file
-	cat > /etc/systemd/system/hyprland-resume.service << 'EOF'
-[Unit]
-Description=Resume hyprland
-After=systemd-suspend.service
-After=systemd-hibernate.service
-After=nvidia-resume.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/suspend-hyprland.sh resume
-
-[Install]
-WantedBy=systemd-suspend.service
-WantedBy=systemd-hibernate.service
-EOF
-
-	# Reload the systemd daemon and enable the newly created services
-	systemctl daemon-reload
-	systemctl enable hyprland-suspend
-	systemctl enable hyprland-resume
-
-	sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null <<EOF
-blacklist nouveau
-options nouveau modeset=0
-EOF
-
-	sudo mkinitcpio -P
-else
-	echo "[*] Skipping NVIDIA driver installation."
-fi
-
 # install packages used by sun
 suns_pacman=(
 	spotify-launcher
@@ -203,6 +123,80 @@ if [[ "$install_sun" == "y" || "$install_sun" == "Y" || "$install_sun" == "yes" 
 	                yay -S --noconfirm "$pkg"
 	        fi
 	done
+fi
+
+# nvidia
+read -p "Install NVIDIA drivers? (y/n): " install_nvidia
+
+if [[ "$install_nvidia" == "y" || "$install_nvidia" == "Y" || "$install_nvidia" == "yes" || "$install_nvidia" == "YES" ]]; then
+	echo "[+] Installing NVIDIA drivers..."
+	sudo pacman -S --needed --noconfirm nvidia-lts nvidia-utils nvidia-settings
+	
+	# Create the suspend-hyprland.sh script
+	sudo tee /usr/local/bin/suspend-hyprland.sh >/dev/null << 'EOF'
+#!/bin/bash
+
+case "$1" in
+	suspend)
+		killall -STOP Hyprland
+		;;
+	resume)
+		killall -CONT Hyprland
+		;;
+esac
+EOF
+
+	# Make the script executable
+	chmod +x /usr/local/bin/suspend-hyprland.sh
+
+	# Create the hyprland-suspend.service systemd service file
+	sudo tee /etc/systemd/system/hyprland-suspend.service >/dev/null << 'EOF'
+[Unit]
+Description=Suspend hyprland
+Before=systemd-suspend.service
+Before=systemd-hibernate.service
+Before=nvidia-suspend.service
+Before=nvidia-hibernate.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/suspend-hyprland.sh suspend
+
+[Install]
+WantedBy=systemd-suspend.service
+WantedBy=systemd-hibernate.service
+EOF
+
+	# Create the hyprland-resume.service systemd service file
+	sudo tee /etc/systemd/system/hyprland-resume.service >/dev/null << 'EOF'
+[Unit]
+Description=Resume hyprland
+After=systemd-suspend.service
+After=systemd-hibernate.service
+After=nvidia-resume.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/suspend-hyprland.sh resume
+
+[Install]
+WantedBy=systemd-suspend.service
+WantedBy=systemd-hibernate.service
+EOF
+
+	# Reload the systemd daemon and enable the newly created services
+	systemctl daemon-reload
+	systemctl enable hyprland-suspend
+	systemctl enable hyprland-resume
+
+	sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null << 'EOF'
+blacklist nouveau
+options nouveau modeset=0
+EOF
+
+	sudo mkinitcpio -P
+else
+	echo "[*] Skipping NVIDIA driver installation."
 fi
 
 # install dotfiles
