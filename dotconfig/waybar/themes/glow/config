@@ -24,6 +24,7 @@
 
     // Modules Left
     "modules-left": [
+	"custom/appmenuicon",
         "clock",
         "wlr/taskbar",
         "hyprland/window",
@@ -42,7 +43,6 @@
         //"network",
         //"battery",
         "tray",
-        "custom/notification",
-        "custom/exit"
+        "custom/notification"
     ]
 }

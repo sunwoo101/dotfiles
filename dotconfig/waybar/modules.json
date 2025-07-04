@@ -77,8 +77,7 @@
   // Rofi Application Launcher
   "custom/appmenuicon": {
     "format": "",
-    "on-click": "sleep 0.2;pkill rofi || rofi -show drun -replace",
-    "on-click-right": "~/.config/hypr/scripts/keybindings.sh",
+    "on-click": "~/.config/nwg-drawer/launch.sh",
     "tooltip-format": "Left: Open the application launcher\nRight: Show all keybindings"
   },
 

@@ -19,7 +19,6 @@ pacman_packages=(
 	sddm
 	waybar
 	nwg-dock-hyprland
-	rofi
 	kitty
 	nano
 	vim
@@ -43,6 +42,7 @@ pacman_packages=(
 	eza
 	swaync
 	hyprshot
+	nwg-drawer
 )
 
 echo ">> Updating package database..."
@@ -76,7 +76,6 @@ aur_packages=(
 	wps-office
 	zen-browser-bin
 	oh-my-posh
-	wlogout
 )
 
 for pkg in "${aur_packages[@]}"; do
