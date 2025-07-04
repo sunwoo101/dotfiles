@@ -48,6 +48,7 @@ pacman_packages=(
 	swaync
 	hyprshot
 	nwg-drawer
+	fastfetch
 )
 
 echo ">> Updating package database..."
