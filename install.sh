@@ -9,6 +9,7 @@ if [[ "$confirm" != "yes" ]]; then
     exit 1
 fi
 
+find ~/dotfiles -type f -name "*.sh" -exec chmod +x {} \;
 
 # pacman packages
 pacman_packages=(
