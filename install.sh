@@ -89,6 +89,7 @@ aur_packages=(
 	waypaper
 	zen-browser-bin
 	oh-my-posh
+	nerd-fonts-complete-mono-glyphs
 )
 
 yay -Syu --noconfirm
