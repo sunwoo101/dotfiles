@@ -1,0 +1,10 @@
+{
+	"widgets": [
+		"inhibitors",
+		"title",
+		"dnd",
+		"notifications",
+		"mpris",
+		"volume"
+	]
+}

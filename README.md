@@ -1,6 +1,6 @@
 # My Arch Hyprland Dotfiles
 
-![Demo](demo.png)
+![Screenshot](screenshot.png)
 
 To install on Arch:
 
