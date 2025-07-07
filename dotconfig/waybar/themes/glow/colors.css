@@ -1,0 +1,10 @@
+@define-color backgroundlight #000000;
+@define-color backgrounddark #000000;
+@define-color workspacesbackground1 #000000;
+@define-color workspacesbackground2 #404040;
+@define-color bordercolor rgba(122, 160, 255, 0.5);
+@define-color bordershadow rgba(122, 160, 255, 1);
+@define-color textcolor1 #FFFFFF;
+@define-color textcolor2 #FFFFFF;
+@define-color textcolor3 #000000;
+@define-color iconcolor #000000;
