@@ -117,6 +117,7 @@ suns_aur=(
 	github-desktop-bin
 	tetrio-desktop
 	wps-office
+	ttf-ms-win10-auto
 )
 
 read -p "Install apps and packages used by sun (may contain bloat)? (y/n): " install_sun
