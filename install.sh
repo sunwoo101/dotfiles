@@ -118,6 +118,7 @@ suns_aur=(
 	tetrio-desktop
 	wps-office
 	ttf-ms-win10-auto
+	google-chrome
 )
 
 read -p "Install apps and packages used by sun (may contain bloat)? (y/n): " install_sun
