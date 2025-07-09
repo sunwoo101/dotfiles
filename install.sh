@@ -118,6 +118,8 @@ suns_aur=(
 	tetrio-desktop
 	wps-office
 	ttf-ms-win10-auto
+	libtiff5
+	ttf-wps-fonts
 	google-chrome
 )
 
