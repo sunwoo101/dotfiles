@@ -26,7 +26,6 @@ pacman_packages=(
 	nwg-dock-hyprland
 	kitty
 	nano
-	vim
 	nvim
 	nautilus
 	xdg-user-dirs
