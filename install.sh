@@ -56,6 +56,8 @@ pacman_packages=(
 	noto-fonts-emoji
 	noto-fonts-cjk
 	gnome-text-editor
+    go
+    rustup
 )
 
 echo ">> Updating package database..."
@@ -120,6 +122,7 @@ suns_aur=(
 	libtiff5
 	ttf-wps-fonts
 	google-chrome
+    dotnet-sdk-bin
 )
 
 read -p "Install apps and packages used by sun (may contain bloat)? (y/n): " install_sun
