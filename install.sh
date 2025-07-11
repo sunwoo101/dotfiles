@@ -56,8 +56,6 @@ pacman_packages=(
 	noto-fonts-emoji
 	noto-fonts-cjk
 	gnome-text-editor
-    go
-    rustup
 )
 
 echo ">> Updating package database..."
@@ -110,6 +108,8 @@ suns_pacman=(
 	discord
 	obs-studio
 	veracrypt
+    go
+    rustup
 )
 
 suns_aur=(
