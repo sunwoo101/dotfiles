@@ -1,16 +1,19 @@
-@define-color bordershadow rgba(122, 160, 255, 1);
-@define-color widget-background rgba(21, 28, 45, 1);
-@define-color widget-active-background rgba(61, 68, 85, 1);
+@define-color bordershadow rgba(255, 255, 255, 0.2);
+@define-color widget-background rgba(150, 150, 150, 0.1);
+@define-color widget-active-background rgba(255, 255, 255, 0.1);
 
 * {
     font-family: "Fira Sans Semibold", Roboto, Helvetica, Arial, sans-serif;
+    transition: all 200ms ease-in-out;
 }
 
 .control-center {
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
 	margin: 8px;
 	padding: 16px;
-	background-color: rgba(17, 19, 24, 0.6);
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	background-color: rgba(150, 150, 150, 0.1);
+	box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 .widget-title {
@@ -22,9 +25,11 @@
 	margin: 16px;
 }
 button {
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
 	border-radius: 10px;
 	background: @widget-background;
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 button:hover {
@@ -34,7 +39,7 @@ button:hover {
 .notification {
 	background-color: @widget-background;
 	padding: 16px;
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 .widget-mpris {
@@ -44,7 +49,11 @@ button:hover {
 
 .widget-mpris-player {
 	border-radius: 10px;
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+.widget-mpris-player button {
+    border-radius: 99px;
 }
 
 .widget-mpris-album-art {
@@ -61,16 +70,19 @@ button:hover {
 }
 
 .widget-dnd > switch {
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
 	background: @widget-background;
 	border-radius: 10px;
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 switch slider {
-	border: none;
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
 	border-radius: 10px;
 	background: @widget-background;
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 switch slider:hover {
@@ -82,28 +94,38 @@ switch slider:hover {
 }
 
 .widget-volume {
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
 	border-radius: 10px;
 	margin: 0px 20px 16px 20px;
 	background: @widget-background;
-	box-shadow: inset 0 0 4px 2px @bordershadow;
+	box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 trough {
-	border-color: rgba(122, 160, 255, 0.2);
-	background: @widget-background;
+    border-radius: 99px;
+    border-width: 0px;
+    border-color: @widget-active-background;
+	background: @widget-active-background;
 }
 
 highlight {
-	border: none;
-        background: @widget-background;
-	box-shadow: 0 0 4px @bordershadow;
+    border-radius: 99px;
+	border-width: 6px;
+    background: rgba(255, 255, 255, 1);
+    background-color: rgba(255, 255, 255, 1);
+    border-color: rgba(255, 255, 255, 1);
 }
 
 .widget-volume slider {
-        background: @widget-background;
-        box-shadow: 0 0 4px @bordershadow;
+    border: none;
+    box-shadow: none;
+    border-color: rgba(0, 0, 0, 0);
+    background: rgba(0, 0, 0, 0);
 }
 
 .widget-volume slider:hover {
-	background: @widget-active-background;
+    border: none;
+    box-shadow: none;
+	background: rgba(0, 0, 0, 0);
 }

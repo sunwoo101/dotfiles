@@ -1,4 +1,4 @@
-style="glow.css"
+style="glass.css"
 killall nwg-drawer
 nwg-drawer -mb 8 -ml 8 -mr 8 -mt 8 -ovl -closebtn right -nocats -nofs -open \
 -pblock "sh $HOME/.config/hypr/scripts/power.sh lock" \

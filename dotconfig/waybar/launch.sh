@@ -1,3 +1,3 @@
-config=~/.config/waybar/themes/glow/config
-style=~/.config/waybar/themes/glow/style.css
+config=~/.config/waybar/themes/glass/config
+style=~/.config/waybar/themes/glass/style.css
 waybar -c $config -s $style

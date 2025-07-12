@@ -1,14 +1,28 @@
 @define-color bordershadow rgba(255, 255, 255, 0.2);
 
 window {
-    background: rgba(0, 0, 0, 0.1);
+    background: rgba(150, 150, 150, 0.1);
     border-radius: 10px;
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
     box-shadow: inset 0 0 2px 2px @bordershadow;
 }
 
 #box {
     /* Define attributes of the box surrounding icons here */
     padding: 2px;
+}
+
+tooltip {
+    background: rgba(150, 150, 150, 0.1);
+    border-radius: 10px;
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+tooltip-label {
+    color: #FFFFFF;
 }
 
 #active {
