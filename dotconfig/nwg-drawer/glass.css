@@ -1,0 +1,53 @@
+@define-color bordershadow rgba(255, 255, 255, 0.2);
+
+* {
+    color: rgba(255, 255, 255, 1);
+    border: none;
+    transition: all 300ms ease-in-out;
+}
+
+window {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    box-shadow: inset 0 0 4px 2px @bordershadow;
+}
+
+/* search entry */
+entry {
+    background-color: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 1);
+    border-radius: 10px;
+    box-shadow: inset 0 0 4px 2px @bordershadow;
+}
+
+button, image {
+    all: unset;
+    border-radius: 10px;
+    padding: 4px;
+    color: rgba(255, 255, 255, 1);
+    background: none;
+    border: none;
+    transition: all 200ms ease-in-out;
+}
+
+button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    box-shadow: inset 0 0 4px 2px @bordershadow;
+}
+
+#pinned-box {
+    padding-bottom: 5px;
+    border-bottom: 1px dotted gray
+}
+
+#files-box {
+    padding: 5px;
+    border: 1px dotted gray;
+    border-radius: 15px
+}
+
+/* math operation result label */
+#math-label {
+    font-weight: bold;
+    font-size: 16px
+}

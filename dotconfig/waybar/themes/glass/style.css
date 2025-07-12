@@ -1,0 +1,318 @@
+/*
+
+ * __        __          _                  ____  _         _
+ * \ \      / /_ _ _   _| |__   __ _ _ __  / ___|| |_ _   _| | ___
+ *  \ \ /\ / / _` | | | | '_ \ / _` | '__| \___ \| __| | | | |/ _ \
+ *   \ V  V / (_| | |_| | |_) | (_| | |     ___) | |_| |_| | |  __/
+ *    \_/\_/ \__,_|\__, |_.__/ \__,_|_|    |____/ \__|\__, |_|\___|
+ *                 |___/                              |___/
+ *
+ * -----------------------------------------------------
+*/
+
+/* -----------------------------------------------------
+ * General
+ * ----------------------------------------------------- */
+
+@import 'colors.css';
+
+* {
+    font-family: "Fira Sans Semibold", "Font Awesome 6 Free", FontAwesome, Roboto, Helvetica, Arial, sans-serif;
+    border: none;
+    border-radius: 0px;
+}
+
+window#waybar {
+    background-color: rgba(0,0,0,0.8);
+    border-bottom: 0px solid #ffffff;
+    /* color: #FFFFFF; */
+    background: transparent;
+    transition-property: background-color;
+    transition-duration: .5s;
+}
+
+/* -----------------------------------------------------
+ * Workspaces
+ * ----------------------------------------------------- */
+
+#workspaces {
+    background: @workspacesbackground1;
+    margin: 2px 4px 2px 4px;
+    padding: 2px 2px;
+    border-radius: 10px;
+    border: 0px;
+    font-weight: bold;
+    font-style: normal;
+    opacity: 0.8;
+    font-size: 12px;
+    color: @textcolor1;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#workspaces button {
+    padding: 0px 10px;
+    margin: 0px 0px;
+    border-radius: 10px;
+    border: 0px;
+    color: @textcolor1;
+    transition: all 0.3s ease-in-out;
+    opacity: 0.4;
+}
+
+#workspaces button.active {
+    color: @textcolor1;
+    border-radius: 10px;
+    transition: all 0.3s ease-in-out;
+    opacity:1.0;
+}
+
+#workspaces button:hover {
+    color: @textcolor1;
+    border-radius: 10px;
+    opacity:0.7;
+}
+
+/* -----------------------------------------------------
+ * Tooltips
+ * ----------------------------------------------------- */
+
+tooltip {
+    border-radius: 10px;
+    background-color: @backgroundlight;
+    opacity:0.9;
+    padding:20px;
+    margin:0px;
+}
+
+tooltip label {
+    color: @textcolor2;
+}
+
+/* -----------------------------------------------------
+ * Window
+ * ----------------------------------------------------- */
+
+#window {
+    background: @backgroundlight;
+    margin: 2px 4px 2px 4px;
+    padding: 2px 10px 2px 10px;
+    border-radius: 10px;
+    color:@textcolor2;
+    font-size: 12px;
+    font-weight:normal;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+window#waybar.empty #window {
+    all: unset;
+}
+
+/* -----------------------------------------------------
+ * Taskbar
+ * ----------------------------------------------------- */
+
+#taskbar {
+    background: @backgroundlight;
+    margin: 2px 4px 2px 4px;
+    padding: 2px 5px 2px 5px;
+    border-radius: 10px;
+    font-weight: normal;
+    font-style: normal;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#taskbar button {
+    margin:0;
+    border-radius: 10px;
+    padding: 0px 5px 0px 5px;
+}
+
+#taskbar.empty {
+    all: unset;
+}
+
+/* -----------------------------------------------------
+ * Custom Notification
+ * ----------------------------------------------------- */
+
+ #custom-notification {
+    background-color: @backgroundlight;
+    border-radius: 10px;
+    padding: 4px 10px 2px 10px;
+    margin: 2px 0px 2px 4px;
+    opacity: 0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+    color: @textcolor2;
+    font-size: 12px;
+}
+
+/* -----------------------------------------------------
+ * Custom Exit
+ * ----------------------------------------------------- */
+
+#custom-appmenuicon {
+    font-family: "JetBrainsMono Nerd Font", sans-serif;
+    background-color: @backgroundlight;
+    border-radius: 10px;
+    padding: 2px 14px 2px 10px;
+    margin: 2px 4px 2px 0px;
+    opacity: 0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+    color: @textcolor2;
+    font-size: 12px;
+}
+
+/* -----------------------------------------------------
+ * Clock
+ * ----------------------------------------------------- */
+
+#clock {
+    background-color: @backgrounddark;
+    font-size: 12px;
+    color: @textcolor1;
+    border-radius: 10px;
+    padding: 3px 10px 2px 10px;
+    margin: 2px 4px 2px 4px;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+/* -----------------------------------------------------
+ * Pulseaudio
+ * ----------------------------------------------------- */
+
+#pulseaudio {
+    background-color: @backgroundlight;
+    font-size: 12px;
+    color: @textcolor2;
+    border-radius: 10px;
+    padding: 4px 10px 2px 10px;
+    margin: 2px 4px 2px 4px;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#pulseaudio.muted {
+    background-color: @backgrounddark;
+    color: @textcolor1;
+}
+
+/* -----------------------------------------------------
+ * Network
+ * ----------------------------------------------------- */
+
+#network {
+    background-color: @backgroundlight;
+    font-size: 12px;
+    color: @textcolor2;
+    border-radius: 10px;
+    padding: 4px 10px 2px 10px;
+    margin: 2px 4px 2px 4px;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#network.ethernet {
+    background-color: @backgroundlight;
+    color: @textcolor2;
+}
+
+#network.wifi {
+    background-color: @backgroundlight;
+    color: @textcolor2;
+}
+
+/* -----------------------------------------------------
+ * Bluetooth
+ * ----------------------------------------------------- */
+
+#bluetooth, #bluetooth.on, #bluetooth.connected {
+    background-color: @backgroundlight;
+    font-size: 12px;
+    color: @textcolor2;
+    border-radius: 10px;
+    padding: 4px 10px 2px 10px;
+    margin: 2px 4px 2px 4px;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#bluetooth.off {
+    background-color: transparent;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* -----------------------------------------------------
+ * Battery
+ * ----------------------------------------------------- */
+
+#battery {
+    background-color: @backgroundlight;
+    font-size: 12px;
+    color: @textcolor2;
+    border-radius: 10px;
+    padding: 4px 15px 2px 10px;
+    margin: 2px 4px 2px 4px;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#battery.charging, #battery.plugged {
+    color: @textcolor2;
+    background-color: @backgroundlight;
+}
+
+@keyframes blink {
+    to {
+        background-color: @backgroundlight;
+        color: @textcolor2;
+    }
+}
+
+#battery.critical:not(.charging) {
+    background-color: #f53c3c;
+    color: @textcolor3;
+    animation-name: blink;
+    animation-duration: 0.5s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+/* -----------------------------------------------------
+ * Tray
+ * ----------------------------------------------------- */
+
+#tray {
+    padding: 2px 10px 2px 10px;
+    margin: 2px 4px 2px 4px;
+    background-color: @backgroundlight;
+    color: @textcolor2;
+    border-radius: 10px;
+    opacity:0.8;
+    border: 0px solid @bordercolor;
+    box-shadow: inset 0 0 2px 2px @bordershadow;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}
+
+
