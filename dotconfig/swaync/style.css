@@ -5,6 +5,11 @@
 * {
     font-family: "Fira Sans Semibold", Roboto, Helvetica, Arial, sans-serif;
     transition: all 200ms ease-in-out;
+    background-color: transparent;
+}
+
+.notification-group {
+    background: transparent;
 }
 
 .control-center {
@@ -37,6 +42,8 @@ button:hover {
 }
 
 .notification {
+    border: solid 1px;
+    border-color: rgba(0, 0, 0, 0.5);
 	background-color: @widget-background;
 	padding: 16px;
 	box-shadow: inset 0 0 2px 2px @bordershadow;
