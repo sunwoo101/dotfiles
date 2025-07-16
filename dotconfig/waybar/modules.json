@@ -97,7 +97,7 @@
 
   // Clock
   "clock": {
-    "format": "{:%H:%M %a • %d %b %Y}",
+    "format": "{:%I:%M%p • %a %d %b}",
     "timezone": "",
     "tooltip": false
   },
