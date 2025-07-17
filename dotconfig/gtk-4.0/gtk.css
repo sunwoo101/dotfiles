@@ -7,8 +7,8 @@
     transition: all 200ms ease-in-out;
 }
 
-window {
-    background-color: rgba(150, 150, 150, 0.1);
+window:not (.swaync) {
+    background-color: rgba(250, 150, 150, 0.1);
 }
 
 entry {
