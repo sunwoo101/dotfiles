@@ -6,9 +6,8 @@
     font-family: "Fira Sans Semibold", Roboto, Helvetica, Arial, sans-serif;
     transition: all 200ms ease-in-out;
 }
-
-window:not (.swaync) {
-    background-color: rgba(250, 150, 150, 0.1);
+.nautilus-window {
+    background-color: rgba(150, 150, 150, 0.1);
 }
 
 entry {
