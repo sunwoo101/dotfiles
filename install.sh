@@ -110,6 +110,8 @@ suns_pacman=(
 	veracrypt
     go
     rustup
+    jdk-openjdk
+    maven
 )
 
 suns_aur=(
