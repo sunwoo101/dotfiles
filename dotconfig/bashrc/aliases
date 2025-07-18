@@ -1,2 +1,5 @@
 alias ls='eza -a --icons=always'
 alias update-grub='sudo grub-mkconfig -o /boot/grub/grub.cfg'
+alias vim=nvim
+alias vi=nvim
+alias v=nvim
