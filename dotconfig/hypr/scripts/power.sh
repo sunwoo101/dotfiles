@@ -67,6 +67,7 @@ fi
 if [[ "$1" == "suspend" ]]; then
   echo ":: Suspend"
   sleep 0.5
+  hyprlock &
   systemctl suspend
 fi
 
