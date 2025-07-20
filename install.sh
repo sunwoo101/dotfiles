@@ -56,6 +56,7 @@ pacman_packages=(
 	noto-fonts-emoji
 	noto-fonts-cjk
 	gnome-text-editor
+    fd
 )
 
 echo ">> Updating package database..."
