@@ -127,6 +127,7 @@ suns_aur=(
 	google-chrome
     dotnet-sdk-bin
     beekeeper-studio-bin
+    avaloniailspy-git
 )
 
 read -p "Install apps and packages used by sun (may contain bloat)? (y/n): " install_sun
