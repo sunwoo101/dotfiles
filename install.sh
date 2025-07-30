@@ -113,6 +113,7 @@ suns_pacman=(
     rustup
     jdk-openjdk
     maven
+    vbindiff
 )
 
 suns_aur=(
