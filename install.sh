@@ -126,6 +126,7 @@ suns_aur=(
 	ttf-wps-fonts
 	google-chrome
     dotnet-sdk-bin
+    beekeeper-studio-bin
 )
 
 read -p "Install apps and packages used by sun (may contain bloat)? (y/n): " install_sun
