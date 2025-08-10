@@ -51,7 +51,7 @@ pacman_packages=(
 	locate
 	papirus-icon-theme
 	ttf-fira-sans
-	ttf-font-awesome
+	woff2-font-awesome
 	noto-fonts
 	noto-fonts-emoji
 	noto-fonts-cjk
