@@ -13,7 +13,7 @@ find ~/dotfiles -type f -name "*.sh" -exec chmod +x {} \;
 
 # pacman packages
 pacman_packages=(
-	linux-lts-headers
+	linux-headers
 	dkms
 	git
 	base-devel
@@ -25,7 +25,6 @@ pacman_packages=(
 	waybar
 	nwg-dock-hyprland
 	kitty
-	nano
 	nvim
 	nautilus
 	xdg-user-dirs
@@ -113,12 +112,11 @@ suns_pacman=(
     rustup
     jdk-openjdk
     maven
-    vbindiff
 )
 
 suns_aur=(
-	rtl8852au-dkms-git
-	visual-studio-code-bin
+	#rtl8852au-dkms-git
+	#visual-studio-code-bin
 	github-desktop-bin
 	tetrio-desktop
 	wps-office
@@ -158,7 +156,7 @@ read -p "Install NVIDIA drivers? (y/n): " install_nvidia
 
 if [[ "$install_nvidia" == "y" || "$install_nvidia" == "Y" || "$install_nvidia" == "yes" || "$install_nvidia" == "YES" ]]; then
 	echo "[+] Installing NVIDIA drivers..."
-	sudo pacman -S --needed --noconfirm nvidia-lts nvidia-utils nvidia-settings
+	sudo pacman -S --needed --noconfirm nvidia nvidia-utils nvidia-settings
 	
 	# Create the suspend-hyprland.sh script
 	sudo tee /usr/local/bin/suspend-hyprland.sh >/dev/null << 'EOF'
