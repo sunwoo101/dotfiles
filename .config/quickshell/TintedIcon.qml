@@ -27,6 +27,10 @@ Item {
         fillMode: Image.PreserveAspectFit
         layer.enabled: true
         visible: false
+        onStatusChanged: {
+            if (status === Image.Error)
+                console.log("TintedIcon load FAILED:", source);
+        }
     }
     MultiEffect {
         anchors.fill: src

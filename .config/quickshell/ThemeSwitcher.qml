@@ -26,11 +26,11 @@ PanelWindow {
 
     screen: modelData
 
-    readonly property int contentWidth:    480
-    readonly property int collapsedHeight: 6
-    readonly property int expandedHeight:  220
-    readonly property int topRadius:       12
-    readonly property int invRadius:       16
+    readonly property int contentWidth:    560
+    readonly property int collapsedHeight: 8
+    readonly property int expandedHeight:  260
+    readonly property int topRadius:       14
+    readonly property int invRadius:       18
     readonly property int panelTotalWidth: contentWidth + 2 * invRadius
 
     property bool open: false
@@ -161,7 +161,7 @@ PanelWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Theme Switcher"
                 color: themeSwitcher.cFg
-                font.pixelSize: 14
+                font.pixelSize: 17
                 font.family: themeSwitcher.fontFamily
                 font.bold: true
             }
@@ -169,8 +169,8 @@ PanelWindow {
             Grid {
                 anchors.horizontalCenter: parent.horizontalCenter
                 columns: 7
-                rowSpacing: 8
-                columnSpacing: 8
+                rowSpacing: 10
+                columnSpacing: 10
 
                 Repeater {
                     model: themeSwitcher.mochaAccents
@@ -179,15 +179,21 @@ PanelWindow {
                         required property var modelData
                         readonly property bool active: themeSwitcher.cPrimary == modelData.hex
 
-                        implicitWidth: 36
-                        implicitHeight: 36
-                        radius: 18
+                        implicitWidth: 44
+                        implicitHeight: 44
+                        radius: 22
                         color: modelData.hex
+                        scale: aMa.containsMouse ? 1.12 : 1.0
                         border.color: active ? themeSwitcher.cFg : "transparent"
                         border.width: active ? 3 : 0
 
+                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                        Behavior on border.width { NumberAnimation { duration: 140 } }
+
                         MouseArea {
+                            id: aMa
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: themeSwitcher.setAccent(parent.modelData.name, parent.modelData.hex)
                         }
@@ -197,16 +203,17 @@ PanelWindow {
 
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 8
+                spacing: 6
 
-                // dark/light toggle
+                // dark/light toggle — subtle hover-fill instead of hard border
                 Rectangle {
-                    implicitWidth: 36
-                    implicitHeight: 28
-                    radius: 6
-                    color: "transparent"
-                    border.color: themeSwitcher.cMuted
-                    border.width: 1
+                    implicitWidth: 48
+                    implicitHeight: 38
+                    radius: 10
+                    color: tMa.containsMouse
+                        ? Qt.rgba(themeSwitcher.cFg.r, themeSwitcher.cFg.g, themeSwitcher.cFg.b, 0.10)
+                        : Qt.rgba(themeSwitcher.cFg.r, themeSwitcher.cFg.g, themeSwitcher.cFg.b, 0.04)
+                    Behavior on color { ColorAnimation { duration: 140 } }
 
                     TintedIcon {
                         anchors.centerIn: parent
@@ -214,11 +221,13 @@ PanelWindow {
                             ? "weather-clear-night-symbolic"
                             : "weather-clear-symbolic"
                         tint: themeSwitcher.cFg
-                        size: 16
+                        size: 20
                     }
 
                     MouseArea {
+                        id: tMa
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: themeSwitcher.toggleFlavor()
                     }
@@ -226,23 +235,26 @@ PanelWindow {
 
                 // reset
                 Rectangle {
-                    implicitWidth: 90
-                    implicitHeight: 28
-                    radius: 6
-                    color: "transparent"
-                    border.color: themeSwitcher.cMuted
-                    border.width: 1
+                    implicitWidth: 120
+                    implicitHeight: 38
+                    radius: 10
+                    color: rMa.containsMouse
+                        ? Qt.rgba(themeSwitcher.cFg.r, themeSwitcher.cFg.g, themeSwitcher.cFg.b, 0.10)
+                        : Qt.rgba(themeSwitcher.cFg.r, themeSwitcher.cFg.g, themeSwitcher.cFg.b, 0.04)
+                    Behavior on color { ColorAnimation { duration: 140 } }
 
                     Text {
                         anchors.centerIn: parent
                         text: "Reset"
                         color: themeSwitcher.cFg
-                        font.pixelSize: 12
+                        font.pixelSize: 14
                         font.family: themeSwitcher.fontFamily
                     }
 
                     MouseArea {
+                        id: rMa
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: themeSwitcher.clearOverride()
                     }

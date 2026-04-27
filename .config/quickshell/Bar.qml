@@ -21,10 +21,14 @@ PanelWindow {
     required property string volumeText
     required property string batteryText
     required property bool   btConnected
+    required property int    notifCount
+
+    signal bellEnter()
+    signal bellLeave()
 
     screen: modelData
 
-    readonly property int   barHeight:  38
+    readonly property int   barHeight:  48
     readonly property int   cornerSize: 16   // gaps_out (8) + window rounding (8)
     readonly property color barColor:   cBg
 
@@ -83,13 +87,13 @@ PanelWindow {
     RowLayout {
         anchors.left: parent.left
         anchors.verticalCenter: barBg.verticalCenter
-        anchors.leftMargin: 12
-        spacing: 14
+        anchors.leftMargin: 14
+        spacing: 16
 
         Text {
             id: clock
             color: bar.cPrimary
-            font.pixelSize: 13
+            font.pixelSize: 16
             font.family: bar.fontFamily
             font.bold: true
 
@@ -104,47 +108,63 @@ PanelWindow {
         Text {
             text: Hyprland.focusedClient ? Hyprland.focusedClient.title : ""
             color: bar.cMuted
-            font.pixelSize: 12
+            font.pixelSize: 15
             font.family: bar.fontFamily
             elide: Text.ElideRight
-            Layout.maximumWidth: 320
+            Layout.maximumWidth: 400
         }
     }
 
-    // CENTER — workspaces 1..10
+    // CENTER — workspaces with windows + active (Hyprland-driven, not 1..10)
     RowLayout {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: barBg.verticalCenter
-        spacing: 4
+        spacing: 6
 
         Repeater {
-            model: 10
+            // Hyprland.workspaces.values is the list of workspaces that exist —
+            // i.e. ones with windows OR the active one. Always sorted by id.
+            model: Hyprland.workspaces.values
 
             Rectangle {
-                required property int index
-                readonly property int wsId: index + 1
+                required property var modelData
+                readonly property int wsId: modelData.id
                 readonly property bool active:
                     Hyprland.focusedWorkspace
                     && Hyprland.focusedWorkspace.id === wsId
 
-                implicitWidth: 22
-                implicitHeight: 20
-                radius: 4
-                color: active ? bar.cPrimary : "transparent"
-                border.color: bar.cMuted
-                border.width: active ? 0 : 1
+                // active = wide pill, inactive = small dot. animates smoothly.
+                implicitWidth: active ? 48 : 24
+                implicitHeight: 24
+                radius: height / 2
+                color: active
+                    ? bar.cPrimary
+                    : (ma.containsMouse
+                        ? Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.15)
+                        : Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.05))
+
+                Behavior on implicitWidth {
+                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                }
+                Behavior on color {
+                    ColorAnimation { duration: 160 }
+                }
 
                 Text {
                     anchors.centerIn: parent
                     text: parent.wsId
                     color: parent.active ? bar.cBg : bar.cFg
-                    font.pixelSize: 12
+                    opacity: parent.active ? 1 : 0
+                    font.pixelSize: 15
                     font.family: bar.fontFamily
                     font.bold: true
+                    Behavior on opacity { NumberAnimation { duration: 160 } }
                 }
 
                 MouseArea {
+                    id: ma
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: Hyprland.dispatch("workspace " + parent.wsId)
                 }
@@ -152,26 +172,27 @@ PanelWindow {
         }
     }
 
-    // RIGHT — system modules (volume + bluetooth + battery)
-    RowLayout {
+    // RIGHT — system modules (volume + bluetooth + battery + notifications)
+    Row {
         anchors.right: parent.right
         anchors.verticalCenter: barBg.verticalCenter
-        anchors.rightMargin: 12
-        spacing: 14
+        anchors.rightMargin: 14
+        spacing: 16
 
         Row {
-            spacing: 4
+            spacing: 6
             TintedIcon {
                 name: bar.volumeText === "muted"
                     ? "audio-volume-muted-symbolic"
                     : "audio-volume-high-symbolic"
                 tint: bar.cFg
+                size: 20
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
                 text: bar.volumeText
                 color: bar.cFg
-                font.pixelSize: 12
+                font.pixelSize: 15
                 font.family: bar.fontFamily
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -180,23 +201,59 @@ PanelWindow {
         TintedIcon {
             name: "bluetooth-active-symbolic"
             tint: bar.cFg
+            size: 20
             visible: bar.btConnected
         }
 
         Row {
-            spacing: 4
+            spacing: 6
             visible: bar.batteryText !== ""
             TintedIcon {
                 name: "battery-good-symbolic"
                 tint: bar.cFg
+                size: 20
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
                 text: bar.batteryText
                 color: bar.cFg
-                font.pixelSize: 12
+                font.pixelSize: 15
                 font.family: bar.fontFamily
                 anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+
+        // notification indicator — bell + count. wrapper Item so MouseArea
+        // can use anchors.fill (forbidden on direct Row children).
+        Item {
+            id: bellWrap
+            implicitWidth: bellRow.implicitWidth
+            implicitHeight: bellRow.implicitHeight
+
+            Row {
+                id: bellRow
+                spacing: 6
+                TintedIcon {
+                    name: bar.notifCount > 0
+                        ? "critical-notif-symbolic"
+                        : "low-notif-symbolic"
+                    tint: bar.cFg
+                    size: 20
+                }
+                Text {
+                    visible: bar.notifCount > 0
+                    text: bar.notifCount
+                    color: bar.cPrimary
+                    font.pixelSize: 15
+                    font.family: bar.fontFamily
+                    font.bold: true
+                }
+            }
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                onEntered: bar.bellEnter()
+                onExited:  bar.bellLeave()
             }
         }
     }

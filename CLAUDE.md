@@ -80,7 +80,7 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
 
 ### Bar (top)
 
-- `barHeight: 38`, `cornerSize: 16` (= `gaps_out` 8 + window rounding 8).
+- `barHeight: 48`, `cornerSize: 16` (= `gaps_out` 8 + window rounding 8).
 - `implicitHeight: barHeight + cornerSize`, `exclusiveZone: barHeight` — corners overhang into workspace without reserving extra space.
 - Layout sections anchor `verticalCenter: barBg.verticalCenter` (not parent's), so they sit in the bar text area, not the corner overhang.
 - Inverse corners (Caelestia style) drawn with `Shape` + `PathArc`. Same color as bar.
@@ -90,7 +90,7 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
 
 - `PanelWindow` anchored bottom-left-right (full width); a centered `Item` holds the visible panel.
 - `exclusiveZone: 0` (overlay, no space reservation).
-- `Behavior on implicitHeight` animates between `collapsedHeight: 6` (peek strip) and `expandedHeight: 220` (full panel).
+- `Behavior on implicitHeight` animates between `collapsedHeight: 8` (peek strip) and `expandedHeight: 260` (full panel).
 - `MouseArea` on the centered `Item` triggers `open = true/false`.
 - Body Shape uses `safeTopRadius = min(topRadius, height/2)` so the collapsed peek is a small pill, not a broken arc.
 - Inverse corners at bottom fade in only when expanded (`opacity: panel.height > invRadius*2 ? 1 : 0`) — hidden when only the trigger strip shows.

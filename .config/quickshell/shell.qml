@@ -7,6 +7,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Notifications
 
 ShellRoot {
     id: shellRoot
@@ -179,6 +180,58 @@ ShellRoot {
         stdout: StdioCollector { onStreamFinished: shellRoot.btConnected = text.includes("Device") }
     }
 
+    // -- notification center hover state ---------------------------------
+    // shared by the Bar's bell + Notifications panel so hover-from-bell-to-panel
+    // doesn't immediately close. Close-timer gives a 250ms grace period.
+    property bool notifOpen: false
+    Timer {
+        id: notifCloseTimer
+        interval: 250
+        onTriggered: shellRoot.notifOpen = false
+    }
+    function notifEnter() { notifCloseTimer.stop(); notifOpen = true; }
+    function notifLeave() { notifCloseTimer.restart(); }
+
+    // -- notification daemon ---------------------------------------------
+    // registers as the freedesktop notification server (replaces swaync). new
+    // notifications are tracked (so the center can render them) AND pushed to
+    // `popped` for ~5s so the panel auto-pops in compact form.
+    property var popped: []
+    function popNotif(n) {
+        popped = [...popped, n];
+        popTimerComp.createObject(shellRoot, { notif: n });
+    }
+    function expirePopped(n) { popped = popped.filter(x => x !== n); }
+
+    Component {
+        id: popTimerComp
+        Timer {
+            property var notif
+            interval: 5000
+            running: true
+            repeat: false
+            onTriggered: {
+                shellRoot.expirePopped(notif);
+                destroy();
+            }
+        }
+    }
+
+    NotificationServer {
+        id: notifSrv
+        keepOnReload: false
+        actionsSupported: true
+        bodySupported: true
+        bodyMarkupSupported: true
+        bodyImagesSupported: true
+        imageSupported: true
+
+        onNotification: (n) => {
+            n.tracked = true;
+            shellRoot.popNotif(n);
+        }
+    }
+
     // -- per-monitor instances -------------------------------------------
     Variants {
         model: Quickshell.screens
@@ -192,6 +245,9 @@ ShellRoot {
             volumeText: shellRoot.volumeText
             batteryText: shellRoot.batteryText
             btConnected: shellRoot.btConnected
+            notifCount: notifSrv.trackedNotifications.values.length
+            onBellEnter:  shellRoot.notifEnter()
+            onBellLeave:  shellRoot.notifLeave()
         }
     }
 
@@ -209,6 +265,24 @@ ShellRoot {
             setAccent: (name, hex) => shellRoot.setAccent(name, hex)
             toggleFlavor: () => shellRoot.toggleFlavor()
             clearOverride: () => shellRoot.clearOverride()
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        Notifications {
+            modelData: modelData
+            notifServer: notifSrv
+            popped: shellRoot.popped
+            expireCallback: (n) => shellRoot.expirePopped(n)
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            open: shellRoot.notifOpen
+            onPanelEnter: shellRoot.notifEnter()
+            onPanelLeave: shellRoot.notifLeave()
         }
     }
 }
