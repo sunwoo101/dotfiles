@@ -1,0 +1,66 @@
+/* generated from colors.json — do not edit */
+@import url("file:///usr/share/themes/catppuccin-mocha-mauve-standard+default/gtk-4.0/gtk.css");
+
+/* one widget (the OS window) paints rgba; every other surface is fully
+   transparent so multiple layers don't compound alpha. result: uniform 0.7
+   across sidebar, main content, headerbar — no darker patches in deeper areas. */
+@define-color window_bg_color rgba(30, 30, 46, 0.7);
+@define-color view_bg_color transparent;
+@define-color sidebar_bg_color transparent;
+@define-color card_bg_color transparent;
+@define-color headerbar_bg_color transparent;
+
+window,
+window:backdrop,
+window.csd,
+window.csd:backdrop,
+window.background,
+window.background:backdrop,
+window.csd.background,
+window.csd.background:backdrop {
+    background-color: rgba(30, 30, 46, 0.7);
+}
+
+.background,
+.background:backdrop,
+.sidebar,
+.sidebar:backdrop,
+.sidebar-pane,
+.sidebar-pane:backdrop,
+.navigation-sidebar,
+.navigation-sidebar:backdrop,
+.navigation-sidebar.background,
+.navigation-sidebar.background:backdrop,
+placessidebar,
+placessidebar:backdrop,
+.view,
+.view:backdrop,
+statuspage,
+statuspage:backdrop,
+.empty-state,
+.empty-state:backdrop,
+headerbar,
+headerbar:backdrop,
+.titlebar,
+.titlebar:backdrop,
+.nautilus-window,
+.nautilus-window:backdrop,
+notebook,
+notebook:backdrop,
+notebook header,
+notebook header:backdrop,
+notebook stack,
+notebook stack:backdrop,
+frame,
+frame:backdrop,
+frame > border,
+viewport,
+viewport:backdrop,
+scrolledwindow,
+scrolledwindow:backdrop,
+listbox,
+listbox:backdrop,
+paned > separator {
+    background-color: transparent;
+}
+

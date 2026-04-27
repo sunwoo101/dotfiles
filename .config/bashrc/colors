@@ -1,0 +1,10 @@
+# generated from colors.json — do not edit
+export BG=#1e1e2e
+export MANTLE=#181825
+export FG=#cdd6f4
+export PRIMARY=#cba6f7
+export ACCENT=#f5c2e7
+export URL=#89b4fa
+export MUTED=#6c7086
+export BORDER=#45475a
+export BG_OPACITY=0.7

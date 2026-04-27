@@ -1,0 +1,13 @@
+/* generated from colors.json — do not edit */
+window,
+window.csd,
+window.background,
+window.background:backdrop,
+window.csd.background,
+dialog,
+dialog.background,
+.background,
+.background:backdrop,
+GtkWindow {
+    background-color: rgba(30, 30, 46, 0.7);
+}
