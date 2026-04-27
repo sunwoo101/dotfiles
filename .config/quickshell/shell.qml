@@ -83,32 +83,40 @@ ShellRoot {
             "~/dotfiles/scripts/render_configs.sh && ~/dotfiles/scripts/apply_gsettings.sh && ~/dotfiles/scripts/reload_all.sh"
         ]
     }
+    // currentAccent + currentFlavor — used by setAccent / toggleFlavor so each
+    // can re-apply the other's last value when invoked.
+    property string currentAccent:    "mauve"
+    property string currentAccentHex: "#cba6f7"
+    property string currentFlavor:    "mocha"   // "mocha" or "latte"
+
+    // setAccent rebuilds the whole UI palette via apply_palette.py.
+    // Writes theme.{gtk,cursor}, ui.* (palette-tinted), ansi.* (flavor-specific).
     function setAccent(name, hex) {
+        currentAccent = name;
+        currentAccentHex = hex;
+        applyPalette();
+    }
+    function toggleFlavor() {
+        currentFlavor = currentFlavor === "mocha" ? "latte" : "mocha";
+        applyPalette();
+    }
+    function applyPalette() {
         writeOverride.running = false;
         writeOverride.command = [
-            "python3", "-c",
-            "import json,sys,pathlib\n" +
-            "p=pathlib.Path(sys.argv[1])\n" +
-            "p.parent.mkdir(parents=True,exist_ok=True)\n" +
-            "gtk,cursor,primary=sys.argv[2],sys.argv[3],sys.argv[4]\n" +
-            "r,g,b=int(primary[1:3],16),int(primary[3:5],16),int(primary[5:7],16)\n" +
-            "tint=lambda f:f'#{int(r*f):02x}{int(g*f):02x}{int(b*f):02x}'\n" +
-            "d=json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}\n" +
-            "d.setdefault('theme',{}).update({'gtk':gtk,'cursor':cursor})\n" +
-            "d.setdefault('ui',{}).update({\n" +
-            "  'primary':primary,'accent':primary,'url':primary,\n" +
-            "  'bg':tint(0.13),'mantle':tint(0.10),\n" +
-            "  'muted':tint(0.40),'border':tint(0.28)\n" +
-            "})\n" +
-            "p.write_text(json.dumps(d,indent=2)+'\\n')",
-            Quickshell.env("HOME") + "/.cache/quickshell/colors-override.json",
-            "catppuccin-mocha-" + name + "-standard+default",
-            "catppuccin-mocha-" + name + "-cursors",
-            hex
+            "python3",
+            Quickshell.env("HOME") + "/dotfiles/scripts/apply_palette.py",
+            currentFlavor,
+            currentAccent,
+            currentAccentHex
         ];
         writeOverride.running = true;
     }
     function clearOverride() {
+        // also reset state so subsequent accent clicks don't carry the
+        // previous flavor (e.g. stuck in Latte after reset).
+        currentFlavor = "mocha";
+        currentAccent = "mauve";
+        currentAccentHex = "#cba6f7";
         writeOverride.running = false;
         writeOverride.command = [
             "sh", "-c",
@@ -340,29 +348,46 @@ ShellRoot {
                 spacing: 14
 
                 // volume
-                Text {
-                    text: "  " + volumeText
-                    color: cFg
-                    font.pixelSize: 12
-                    font.family: fontFamily
+                Row {
+                    spacing: 4
+                    TintedIcon {
+                        name: volumeText === "muted" ? "audio-volume-muted-symbolic"
+                            : "audio-volume-high-symbolic"
+                        tint: cFg
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: volumeText
+                        color: cFg
+                        font.pixelSize: 12
+                        font.family: fontFamily
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
                 // bluetooth — only show when connected
-                Text {
-                    text: ""
-                    color: cFg
-                    font.pixelSize: 12
-                    font.family: fontFamily
+                TintedIcon {
+                    name: "bluetooth-active-symbolic"
+                    tint: cFg
                     visible: btConnected
                 }
 
                 // battery — only show if a battery exists
-                Text {
-                    text: "  " + batteryText
-                    color: cFg
-                    font.pixelSize: 12
-                    font.family: fontFamily
+                Row {
+                    spacing: 4
                     visible: batteryText !== ""
+                    TintedIcon {
+                        name: "battery-good-symbolic"
+                        tint: cFg
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: batteryText
+                        color: cFg
+                        font.pixelSize: 12
+                        font.family: fontFamily
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
 
             }
@@ -556,27 +581,59 @@ ShellRoot {
                         }
                     }
 
-                    Rectangle {
+                    Row {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        implicitWidth: 90
-                        implicitHeight: 28
-                        radius: 6
-                        color: "transparent"
-                        border.color: cMuted
-                        border.width: 1
+                        spacing: 8
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Reset"
-                            color: cFg
-                            font.pixelSize: 12
-                            font.family: fontFamily
+                        // dark/light toggle — sun/moon glyphs
+                        Rectangle {
+                            implicitWidth: 36
+                            implicitHeight: 28
+                            radius: 6
+                            color: "transparent"
+                            border.color: cMuted
+                            border.width: 1
+
+                            TintedIcon {
+                                anchors.centerIn: parent
+                                name: currentFlavor === "mocha"
+                                    ? "weather-clear-night-symbolic"
+                                    : "weather-clear-symbolic"
+                                tint: cFg
+                                size: 16
+
+
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: toggleFlavor()
+                            }
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: clearOverride()
+                        // reset
+                        Rectangle {
+                            implicitWidth: 90
+                            implicitHeight: 28
+                            radius: 6
+                            color: "transparent"
+                            border.color: cMuted
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Reset"
+                                color: cFg
+                                font.pixelSize: 12
+                                font.family: fontFamily
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: clearOverride()
+                            }
                         }
                     }
                 }

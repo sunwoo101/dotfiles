@@ -31,7 +31,13 @@ print(t["gtk"], t["icon"], t["cursor"], t["cursor_size"])
 PY
 )"
 
-gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
+# derive dark vs light from theme name (catppuccin-mocha-* / Catppuccin-Mauve-Dark = dark; latte / -Light = light)
+if echo "$GTK_THEME" | grep -qiE "latte|-light"; then
+    SCHEME="prefer-light"
+else
+    SCHEME="prefer-dark"
+fi
+gsettings set org.gnome.desktop.interface color-scheme "$SCHEME" || true
 gsettings set org.gnome.desktop.interface gtk-theme "$GTK_THEME" || true
 gsettings set org.gnome.desktop.interface icon-theme "$ICON_THEME" || true
 gsettings set org.gnome.desktop.interface cursor-theme "$CURSOR_THEME" || true
