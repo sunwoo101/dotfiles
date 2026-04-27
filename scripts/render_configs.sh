@@ -4,12 +4,31 @@ set -euo pipefail
 DOTFILES="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
 DOTFILES_CONFIG="$DOTFILES/.config"
 
-# generate per-tool config from the single source of truth (colors.json)
-python3 - "$DOTFILES_CONFIG" "$DOTFILES" <<'PY'
+# generate per-tool config from colors.json + optional override file
+OVERRIDE="${HOME}/.cache/quickshell/colors-override.json"
+
+python3 - "$DOTFILES_CONFIG" "$DOTFILES" "$OVERRIDE" <<'PY'
 import json, sys, os
 base = sys.argv[1]
 repo = sys.argv[2]
+override_path = sys.argv[3]
+
 data = json.load(open(os.path.join(base, "colors.json")))
+
+# shallow-merge override on top: override.ui[*] beats base.ui[*], etc.
+if os.path.exists(override_path):
+    try:
+        with open(override_path) as f:
+            text = f.read().strip()
+        if text:
+            override = json.loads(text)
+            for section, values in override.items():
+                if isinstance(values, dict) and section in data:
+                    data[section].update(values)
+                else:
+                    data[section] = values
+    except (json.JSONDecodeError, OSError) as e:
+        sys.stderr.write(f"warning: ignoring override ({e})\n")
 
 ANSI_ORDER = [
     "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",

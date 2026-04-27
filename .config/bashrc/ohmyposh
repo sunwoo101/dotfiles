@@ -1,1 +1,9 @@
-eval "$(oh-my-posh init bash --config $HOME/.config/ohmyposh/theme.omp.json)"
+# oh-my-posh embeds the theme JSON contents into the shell init code, so editing
+# theme.omp.json doesn't change the live prompt. _omp_reinit re-evaluates the
+# init block (re-reads the JSON). reload_all.sh sends SIGUSR1 to all bashes,
+# triggering this trap.
+_omp_reinit() {
+    eval "$(oh-my-posh init bash --config "$HOME/.config/ohmyposh/theme.omp.json")"
+}
+trap _omp_reinit USR1
+_omp_reinit
