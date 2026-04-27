@@ -79,7 +79,11 @@ with open(os.path.join(base, "bashrc", "colors"), "w") as f:
 template_path = os.path.join(repo, "templates", "ohmyposh.omp.json")
 theme_out = os.path.join(base, "ohmyposh", "theme.omp.json")
 theme = json.load(open(template_path))
-theme["palette"] = {"_note": "generated — edit colors.json or palette source", **ui}
+theme["palette"] = {
+    "_note": "generated — edit colors.json or palette source",
+    **ui,
+    **data["ansi"],   # expose p:red, p:yellow, p:green, etc. to templates
+}
 with open(theme_out, "w") as f:
     json.dump(theme, f, indent=2, ensure_ascii=False)
     f.write("\n")

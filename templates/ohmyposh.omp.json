@@ -19,12 +19,12 @@
         {
           "type": "git",
           "style": "plain",
-          "foreground": "p:accent",
+          "foreground": "p:yellow",
           "properties": {
             "fetch_status": true,
-            "branch_icon": ""
+            "branch_icon": " "
           },
-          "template": "  {{ .HEAD }}{{ if or (.Working.Changed) (.Staging.Changed) }}*{{ end }}"
+          "template": " {{ .HEAD }}{{ if or (.Working.Changed) (.Staging.Changed) }}*{{ end }}"
         }
       ]
     },
