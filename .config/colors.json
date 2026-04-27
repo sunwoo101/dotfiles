@@ -25,14 +25,14 @@
     "bright_white":   "#a6adc8"
   },
   "ui": {
-    "bg":      "#1e1e2e",
-    "mantle":  "#181825",
+    "bg":      "#1a1520",
+    "mantle":  "#141018",
     "fg":      "#cdd6f4",
     "primary": "#cba6f7",
-    "accent":  "#f5c2e7",
-    "url":     "#89b4fa",
-    "muted":   "#6c7086",
-    "border":  "#45475a"
+    "accent":  "#cba6f7",
+    "url":     "#cba6f7",
+    "muted":   "#514262",
+    "border":  "#382e45"
   },
   "opacity": {
     "bg": 0.7

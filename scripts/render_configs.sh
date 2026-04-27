@@ -73,11 +73,14 @@ with open(os.path.join(base, "bashrc", "colors"), "w") as f:
     for k, v in data["opacity"].items():
         f.write(f"export {k.upper()}_OPACITY={v}\n")
 
-# oh-my-posh palette
-theme_path = os.path.join(base, "ohmyposh", "theme.omp.json")
-theme = json.load(open(theme_path))
-theme["palette"] = {"_note": "managed by scripts/generate_configs.sh — edit colors.json instead", **ui}
-with open(theme_path, "w") as f:
+# oh-my-posh: load template (tracked, hand-edited blocks/segments) and inject
+# the palette from merged colors. output is gitignored so accent clicks don't
+# pollute git status.
+template_path = os.path.join(repo, "templates", "ohmyposh.omp.json")
+theme_out = os.path.join(base, "ohmyposh", "theme.omp.json")
+theme = json.load(open(template_path))
+theme["palette"] = {"_note": "generated — edit colors.json or palette source", **ui}
+with open(theme_out, "w") as f:
     json.dump(theme, f, indent=2, ensure_ascii=False)
     f.write("\n")
 

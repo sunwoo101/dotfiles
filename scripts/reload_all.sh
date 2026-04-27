@@ -8,17 +8,18 @@ set -uo pipefail
 # pokes the non-Quickshell apps that need live updates.
 
 # kitty — live color update via remote control. requires `allow_remote_control yes`
-# and `listen_on unix:@mykitty` in kitty.conf (we set both). only kitty windows
-# launched AFTER those settings were added will respond. surface stderr so we
-# can see why it failed instead of silencing.
+# and `listen_on unix:@mykitty` in kitty.conf. kitty appends -{pid} to abstract
+# socket names, so we iterate every running kitty's per-pid socket. only kitty
+# windows launched AFTER those settings were added will respond.
 if command -v kitty >/dev/null 2>&1 && pgrep -x kitty >/dev/null; then
-    if kitty @ --to=unix:@mykitty set-colors --all --configured \
-            "$HOME/.config/colors.conf"; then
-        echo "kitty: colors reloaded"
-    else
-        echo "kitty: reload failed (likely the running kitty was started before"
-        echo "  'allow_remote_control yes' was in kitty.conf — close+reopen one)"
-    fi
+    for pid in $(pgrep -x kitty); do
+        if kitty @ --to=unix:@mykitty-$pid set-colors --all --configured \
+                "$HOME/.config/colors.conf" 2>/dev/null; then
+            echo "kitty[$pid]: colors reloaded"
+        else
+            echo "kitty[$pid]: failed (started before remote control was on?)"
+        fi
+    done
 fi
 
 # hyprland — re-reads its config and any included files

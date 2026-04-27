@@ -8,10 +8,28 @@ if ! command -v gsettings >/dev/null 2>&1; then
     exit 0
 fi
 
-GTK_THEME=$(python3 -c "import json; print(json.load(open('$DOTFILES/.config/colors.json'))['theme']['gtk'])")
-ICON_THEME=$(python3 -c "import json; print(json.load(open('$DOTFILES/.config/colors.json'))['theme']['icon'])")
-CURSOR_THEME=$(python3 -c "import json; print(json.load(open('$DOTFILES/.config/colors.json'))['theme']['cursor'])")
-CURSOR_SIZE=$(python3 -c "import json; print(json.load(open('$DOTFILES/.config/colors.json'))['theme']['cursor_size'])")
+# read theme block from colors.json + override file (override wins)
+read -r GTK_THEME ICON_THEME CURSOR_THEME CURSOR_SIZE <<<"$(
+python3 - "$DOTFILES" <<'PY'
+import json, os, pathlib, sys
+base = json.load(open(sys.argv[1] + "/.config/colors.json"))
+override = pathlib.Path.home() / ".cache" / "quickshell" / "colors-override.json"
+if override.exists():
+    text = override.read_text().strip()
+    if text:
+        try:
+            data = json.loads(text)
+            for section, values in data.items():
+                if isinstance(values, dict) and section in base:
+                    base[section].update(values)
+                else:
+                    base[section] = values
+        except json.JSONDecodeError:
+            pass
+t = base["theme"]
+print(t["gtk"], t["icon"], t["cursor"], t["cursor_size"])
+PY
+)"
 
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 gsettings set org.gnome.desktop.interface gtk-theme "$GTK_THEME" || true

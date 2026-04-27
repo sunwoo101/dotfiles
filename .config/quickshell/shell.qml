@@ -90,15 +90,34 @@ ShellRoot {
         running: false
         command: [
             "sh", "-c",
-            "~/dotfiles/scripts/render_configs.sh && ~/dotfiles/scripts/reload_all.sh"
+            "~/dotfiles/scripts/render_configs.sh && ~/dotfiles/scripts/apply_gsettings.sh && ~/dotfiles/scripts/reload_all.sh"
         ]
     }
-    function setPrimary(hex) {
+    // setAccent rebuilds the whole UI palette from a single accent color.
+    // changes: theme.gtk, theme.cursor, ui.{primary,accent,url,bg,mantle,muted,border}.
+    // ANSI palette + ui.fg are left at base so terminal apps stay consistent
+    // and text remains readable.
+    function setAccent(name, hex) {
         writeOverride.running = false;
         writeOverride.command = [
             "python3", "-c",
-            "import json,sys,pathlib;p=pathlib.Path(sys.argv[1]);p.parent.mkdir(parents=True,exist_ok=True);d=json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {};d.setdefault('ui',{})['primary']=sys.argv[2];p.write_text(json.dumps(d,indent=2)+'\\n')",
+            "import json,sys,pathlib\n" +
+            "p=pathlib.Path(sys.argv[1])\n" +
+            "p.parent.mkdir(parents=True,exist_ok=True)\n" +
+            "gtk,cursor,primary=sys.argv[2],sys.argv[3],sys.argv[4]\n" +
+            "r,g,b=int(primary[1:3],16),int(primary[3:5],16),int(primary[5:7],16)\n" +
+            "tint=lambda f:f'#{int(r*f):02x}{int(g*f):02x}{int(b*f):02x}'\n" +
+            "d=json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}\n" +
+            "d.setdefault('theme',{}).update({'gtk':gtk,'cursor':cursor})\n" +
+            "d.setdefault('ui',{}).update({\n" +
+            "  'primary':primary,'accent':primary,'url':primary,\n" +
+            "  'bg':tint(0.13),'mantle':tint(0.10),\n" +
+            "  'muted':tint(0.40),'border':tint(0.28)\n" +
+            "})\n" +
+            "p.write_text(json.dumps(d,indent=2)+'\\n')",
             Quickshell.env("HOME") + "/.cache/quickshell/colors-override.json",
+            "catppuccin-mocha-" + name + "-standard+default",
+            "catppuccin-mocha-" + name + "-cursors",
             hex
         ];
         writeOverride.running = true;
@@ -111,6 +130,24 @@ ShellRoot {
         ];
         writeOverride.running = true;
     }
+
+    // all 14 Catppuccin Mocha accent variants
+    property var mochaAccents: [
+        { name: "rosewater", hex: "#f5e0dc" },
+        { name: "flamingo",  hex: "#f2cdcd" },
+        { name: "pink",      hex: "#f5c2e7" },
+        { name: "mauve",     hex: "#cba6f7" },
+        { name: "red",       hex: "#f38ba8" },
+        { name: "maroon",    hex: "#eba0ac" },
+        { name: "peach",     hex: "#fab387" },
+        { name: "yellow",    hex: "#f9e2af" },
+        { name: "green",     hex: "#a6e3a1" },
+        { name: "teal",      hex: "#94e2d5" },
+        { name: "sky",       hex: "#89dceb" },
+        { name: "sapphire",  hex: "#74c7ec" },
+        { name: "blue",      hex: "#89b4fa" },
+        { name: "lavender",  hex: "#b4befe" }
+    ]
 
     // -- bar (one per monitor) -------------------------------------------
     Variants {
@@ -181,54 +218,45 @@ ShellRoot {
                     font.family: "JetBrainsMono Nerd Font"
                 }
 
-                // TEST: primary-color picker --------------------------------
-                // writes to ~/.cache/quickshell/colors-override.json (gitignored)
-                // not to colors.json — repo stays clean. R = clear override.
+                // TEST: Catppuccin Mocha accent picker ---------------------
+                // 14 accent variants. each click writes theme.gtk +
+                // theme.cursor + ui.primary to override (gitignored).
+                // active accent gets a cFg border. R clears override.
                 RowLayout {
-                    spacing: 4
+                    spacing: 3
 
                     Repeater {
-                        model: [
-                            { hex: "#cba6f7", label: "M" },  // mauve
-                            { hex: "#f5c2e7", label: "P" },  // pink
-                            { hex: "#89b4fa", label: "B" },  // blue
-                            { hex: "#a6e3a1", label: "G" },  // green
-                            { hex: "#f9e2af", label: "Y" }   // yellow
-                        ]
+                        model: mochaAccents
 
                         Rectangle {
                             required property var modelData
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            radius: 4
-                            color: modelData.hex
+                            readonly property bool active: cPrimary == modelData.hex
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: parent.modelData.label
-                                color: cBg
-                                font.pixelSize: 10
-                                font.bold: true
-                                font.family: "JetBrainsMono Nerd Font"
-                            }
+                            implicitWidth: 16
+                            implicitHeight: 16
+                            radius: 8
+                            color: modelData.hex
+                            border.color: active ? cFg : "transparent"
+                            border.width: active ? 2 : 0
 
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: setPrimary(parent.modelData.hex)
+                                onClicked: setAccent(parent.modelData.name, parent.modelData.hex)
                             }
                         }
                     }
 
+                    Item { implicitWidth: 4 }
+
                     // reset button
                     Rectangle {
-                        implicitWidth: 20
-                        implicitHeight: 20
+                        implicitWidth: 18
+                        implicitHeight: 18
                         radius: 4
                         color: "transparent"
                         border.color: cMuted
                         border.width: 1
-
                         Text {
                             anchors.centerIn: parent
                             text: "R"
@@ -237,7 +265,6 @@ ShellRoot {
                             font.bold: true
                             font.family: "JetBrainsMono Nerd Font"
                         }
-
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
