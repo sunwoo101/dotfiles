@@ -15,5 +15,5 @@ if [ "${#PKGS[@]}" -eq 0 ]; then
     exit 0
 fi
 
-echo "installing ${#PKGS[@]} pacman packages"
-sudo pacman -S --needed --noconfirm "${PKGS[@]}"
+echo "installing ${#PKGS[@]} pacman packages (full sync+upgrade to avoid partial-upgrade conflicts)"
+sudo pacman -Syu --needed --noconfirm "${PKGS[@]}"

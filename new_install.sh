@@ -10,6 +10,7 @@ run() {
     "$SCRIPTS/$1"
 }
 
+run enable_repos.sh
 run install_pacman_packages.sh
 run install_gpu_drivers.sh
 run install_yay.sh

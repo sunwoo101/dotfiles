@@ -41,6 +41,7 @@
 - ttf-liberation
 - eza
 - neovim
+- neovide
 - linux-headers
 - dkms
 - jq
