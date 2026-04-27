@@ -1,6 +1,8 @@
 {
   "theme": {
-    "gtk": "catppuccin-mocha-mauve-standard+default"
+    "gtk": "catppuccin-mocha-mauve-standard+default",
+    "gtk2_fallback": "Adwaita",
+    "icon": "Adwaita"
   },
   "ansi": {
     "black":          "#45475a",

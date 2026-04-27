@@ -27,6 +27,8 @@ def rgba(hex_color, alpha):
 ui = data["ui"]
 bg_rgba = rgba(ui["bg"], data["opacity"]["bg"])
 gtk_theme = data["theme"]["gtk"]
+gtk2_theme = data["theme"]["gtk2_fallback"]
+icon_theme = data["theme"]["icon"]
 
 # kitty colors.conf (ANSI palette + UI colors + opacity)
 with open(os.path.join(base, "colors.conf"), "w") as f:
@@ -62,8 +64,9 @@ def settings_ini(extra=""):
     lines = [
         "[Settings]",
         f"gtk-theme-name={gtk_theme}",
+        f"gtk-icon-theme-name={icon_theme}",
         "gtk-font-name=JetBrainsMono Nerd Font 11",
-        "gtk-decoration-layout=:menu",
+        "gtk-decoration-layout=:",
     ]
     if extra:
         lines.append(extra)
@@ -165,6 +168,29 @@ paned > separator {{
 """
 with open(os.path.join(base, "gtk-4.0", "gtk.css"), "w") as f:
     f.write(gtk4_css)
+
+# gtkrc-2.0 — catppuccin doesn't ship a GTK2 theme, so use Adwaita fallback
+# but otherwise mirror our other GTK theme settings so old GTK2 apps look reasonable.
+gtkrc2 = f"""# generated from colors.json — do not edit
+gtk-theme-name="{gtk2_theme}"
+gtk-icon-theme-name="{icon_theme}"
+gtk-font-name="JetBrainsMono Nerd Font 11"
+gtk-cursor-theme-name="default"
+gtk-cursor-theme-size=24
+gtk-application-prefer-dark-theme=1
+gtk-toolbar-style=GTK_TOOLBAR_ICONS
+gtk-toolbar-icon-size=GTK_ICON_SIZE_LARGE_TOOLBAR
+gtk-button-images=0
+gtk-menu-images=0
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle="hintslight"
+gtk-xft-rgba="rgb"
+"""
+home_dir = os.path.join(os.path.dirname(base.rstrip("/")), "home")
+os.makedirs(home_dir, exist_ok=True)
+with open(os.path.join(home_dir, ".gtkrc-2.0"), "w") as f:
+    f.write(gtkrc2)
 PY
 echo "generated configs from colors.json"
 
@@ -185,12 +211,26 @@ for src in "$DOTFILES_CONFIG"/*; do
     echo "linked $dest -> $src"
 done
 
+# symlink ~/.gtkrc-2.0 -> dotfiles/home/.gtkrc-2.0 (GTK2 settings live in $HOME, not .config)
+GTKRC2_SRC="$HOME/dotfiles/home/.gtkrc-2.0"
+GTKRC2_DEST="$HOME/.gtkrc-2.0"
+if [ -L "$GTKRC2_DEST" ]; then
+    rm "$GTKRC2_DEST"
+elif [ -e "$GTKRC2_DEST" ]; then
+    rm -rf "$GTKRC2_DEST"
+fi
+ln -s "$GTKRC2_SRC" "$GTKRC2_DEST"
+echo "linked $GTKRC2_DEST -> $GTKRC2_SRC"
+
 # prefer dark + set gtk theme from colors.json
 if command -v gsettings >/dev/null 2>&1; then
     GTK_THEME=$(python3 -c "import json; print(json.load(open('$DOTFILES_CONFIG/colors.json'))['theme']['gtk'])")
+    ICON_THEME=$(python3 -c "import json; print(json.load(open('$DOTFILES_CONFIG/colors.json'))['theme']['icon'])")
     gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
     gsettings set org.gnome.desktop.interface gtk-theme "$GTK_THEME" || true
-    echo "set gsettings color-scheme=prefer-dark, gtk-theme=$GTK_THEME"
+    gsettings set org.gnome.desktop.interface icon-theme "$ICON_THEME" || true
+    gsettings set org.gnome.desktop.wm.preferences button-layout ':' || true
+    echo "set gsettings color-scheme=prefer-dark, gtk-theme=$GTK_THEME, icon-theme=$ICON_THEME, button-layout=:"
 fi
 
 BASHRC="$HOME/.bashrc"
