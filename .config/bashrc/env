@@ -1,0 +1,5 @@
+# default app env vars — used by tools like git, less, xdg-open fallbacks
+export BROWSER=google-chrome-stable
+export EDITOR=nvim
+export VISUAL=nvim
+export TERMINAL=kitty

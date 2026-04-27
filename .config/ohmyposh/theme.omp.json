@@ -3,7 +3,7 @@
   "version": 3,
   "final_space": true,
   "palette": {
-    "_note": "managed by new_install.sh — edit colors.json instead",
+    "_note": "managed by scripts/generate_configs.sh — edit colors.json instead",
     "bg": "#1e1e2e",
     "mantle": "#181825",
     "fg": "#cdd6f4",
