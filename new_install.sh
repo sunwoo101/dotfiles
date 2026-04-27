@@ -14,6 +14,7 @@ run install_pacman_packages.sh
 run install_gpu_drivers.sh
 run install_yay.sh
 run install_aur_packages.sh
+run install_colloid_icons.sh
 run enable_services.sh
 run render_configs.sh
 run symlink_dotfiles.sh

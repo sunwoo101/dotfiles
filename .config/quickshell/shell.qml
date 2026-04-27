@@ -2,17 +2,13 @@
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 
 ShellRoot {
     // -- two-layer color system ----------------------------------------
-    // base: ~/.config/colors.json (in dotfiles repo, read-only at runtime)
-    // override: ~/.cache/quickshell/colors-override.json (gitignored, mutable)
-    // final colors = base shallow-merged with override.
-    // text is a method on FileView, not a property — capture it into our own
-    // observable string properties so QML bindings re-evaluate on change.
     property string baseContents: ""
     property string overrideContents: ""
 
@@ -31,9 +27,6 @@ ShellRoot {
         onLoaded: overrideContents = text()
     }
 
-    // create the override file (empty {}) at startup so FileView can watch it
-    // immediately and Process writes update an existing file (more reliable
-    // than create-then-watch).
     Process {
         id: initOverride
         running: true
@@ -49,7 +42,6 @@ ShellRoot {
         try { return JSON.parse(text); } catch (e) { return null; }
     }
 
-    // shallow merge: override.ui takes priority over base.ui, etc.
     property var colors: {
         var base = safeParse(baseContents);
         var over = safeParse(overrideContents);
@@ -72,11 +64,9 @@ ShellRoot {
     property color cAccent:  colors ? colors.ui.accent  : "#f5c2e7"
     property color cMuted:   colors ? colors.ui.muted   : "#6c7086"
     property real  cAlpha:   colors ? colors.opacity.bg : 0.7
+    property string fontFamily: "JetBrainsMono Nerd Font"
 
-    // -- TEST: write override + render + reload -------------------------
-    // chain: write override → run render_configs.sh (regenerates kitty.conf,
-    // gtk.css etc. with merged colors) → run reload_all.sh (pushes live to
-    // running kitty/hyprland).
+    // -- accent picker (TEST) -------------------------------------------
     Process {
         id: writeOverride
         running: false
@@ -93,10 +83,6 @@ ShellRoot {
             "~/dotfiles/scripts/render_configs.sh && ~/dotfiles/scripts/apply_gsettings.sh && ~/dotfiles/scripts/reload_all.sh"
         ]
     }
-    // setAccent rebuilds the whole UI palette from a single accent color.
-    // changes: theme.gtk, theme.cursor, ui.{primary,accent,url,bg,mantle,muted,border}.
-    // ANSI palette + ui.fg are left at base so terminal apps stay consistent
-    // and text remains readable.
     function setAccent(name, hex) {
         writeOverride.running = false;
         writeOverride.command = [
@@ -131,7 +117,6 @@ ShellRoot {
         writeOverride.running = true;
     }
 
-    // all 14 Catppuccin Mocha accent variants
     property var mochaAccents: [
         { name: "rosewater", hex: "#f5e0dc" },
         { name: "flamingo",  hex: "#f2cdcd" },
@@ -149,79 +134,246 @@ ShellRoot {
         { name: "lavender",  hex: "#b4befe" }
     ]
 
-    // -- bar (one per monitor) -------------------------------------------
+    // -- system module polling -----------------------------------------
+    // simple Process-based polling — reliable across Quickshell versions and
+    // works regardless of audio backend (pipewire/pulseaudio).
+    property string volumeText: "??"
+    property string batteryText: ""
+    property bool   btConnected: false
+
+    Timer {
+        interval: 2000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            pollVolume.running = true
+            pollBattery.running = true
+            pollBluetooth.running = true
+        }
+    }
+
+    Process {
+        id: pollVolume
+        running: false
+        command: ["sh", "-c",
+            "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | " +
+            "awk '{ if($NF==\"[MUTED]\") print \"muted\"; else printf \"%d%%\", $2*100 }'"]
+        stdout: StdioCollector { onStreamFinished: volumeText = text.trim() || "??" }
+    }
+
+    Process {
+        id: pollBattery
+        running: false
+        command: ["sh", "-c",
+            "p=$(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1); " +
+            "s=$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1); " +
+            "[ -n \"$p\" ] && printf '%s%%%s' \"$p\" \"$([ \"$s\" = Charging ] && echo ' ⚡')\" || echo ''"]
+        stdout: StdioCollector { onStreamFinished: batteryText = text.trim() }
+    }
+
+    Process {
+        id: pollBluetooth
+        running: false
+        command: ["sh", "-c", "bluetoothctl info 2>/dev/null | head -1"]
+        stdout: StdioCollector { onStreamFinished: btConnected = text.includes("Device") }
+    }
+
+    // -- bar (one per monitor) -----------------------------------------
     Variants {
         model: Quickshell.screens
 
         PanelWindow {
+            id: bar
             required property var modelData
             screen: modelData
 
+            readonly property int  barHeight:  38
+            readonly property int  cornerSize: 16  // gaps_out (8) + window rounding (8)
+            readonly property color barColor:  cBg   // dev: opaque (use Qt.rgba(cBg.r,cBg.g,cBg.b,cAlpha) for translucent)
+
             anchors { top: true; left: true; right: true }
-            implicitHeight: 32
-            color: Qt.rgba(cBg.r, cBg.g, cBg.b, cAlpha)
+            implicitHeight: barHeight + cornerSize
+            exclusiveZone: barHeight   // only reserve the bar itself, corners overhang
+            color: "transparent"
 
+            // bar background (top portion)
+            Rectangle {
+                id: barBg
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: bar.barHeight
+                color: bar.barColor
+            }
+
+            // inverse-rounded LEFT corner — extends bar's color past its bottom
+            // edge then curves outward, leaving a window-shaped notch
+            Shape {
+                width: bar.cornerSize
+                height: bar.cornerSize
+                anchors {
+                    left: parent.left
+                    top: parent.top
+                    topMargin: bar.barHeight
+                }
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: bar.barColor
+                    startX: 0
+                    startY: 0
+                    PathLine { x: bar.cornerSize; y: 0 }
+                    PathArc {
+                        x: 0; y: bar.cornerSize
+                        radiusX: bar.cornerSize
+                        radiusY: bar.cornerSize
+                        direction: PathArc.Counterclockwise
+                    }
+                    PathLine { x: 0; y: 0 }
+                }
+            }
+
+            // inverse-rounded RIGHT corner — mirror of left
+            Shape {
+                width: bar.cornerSize
+                height: bar.cornerSize
+                anchors {
+                    right: parent.right
+                    top: parent.top
+                    topMargin: bar.barHeight
+                }
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: bar.barColor
+                    startX: 0
+                    startY: 0
+                    PathLine { x: bar.cornerSize; y: 0 }
+                    PathLine { x: bar.cornerSize; y: bar.cornerSize }
+                    PathArc {
+                        x: 0; y: 0
+                        radiusX: bar.cornerSize
+                        radiusY: bar.cornerSize
+                        direction: PathArc.Counterclockwise
+                    }
+                }
+            }
+
+            // LEFT — clock + window title
             RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                spacing: 16
+                anchors.left: parent.left
+                anchors.verticalCenter: barBg.verticalCenter
+                anchors.leftMargin: 12
+                spacing: 14
 
-                // workspaces (1..10) ---------------------------------------
-                RowLayout {
-                    spacing: 4
+                Text {
+                    id: clock
+                    color: cPrimary
+                    font.pixelSize: 13
+                    font.family: fontFamily
+                    font.bold: true
 
-                    Repeater {
-                        model: 10
-
-                        Rectangle {
-                            required property int index
-                            readonly property int wsId: index + 1
-                            readonly property bool active:
-                                Hyprland.focusedWorkspace
-                                && Hyprland.focusedWorkspace.id === wsId
-
-                            implicitWidth: 22
-                            implicitHeight: 20
-                            radius: 4
-                            color: active ? cPrimary : "transparent"
-                            border.color: cMuted
-                            border.width: active ? 0 : 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: parent.wsId
-                                color: parent.active ? cBg : cFg
-                                font.pixelSize: 11
-                                font.family: "JetBrainsMono Nerd Font"
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Hyprland.dispatch("workspace " + parent.wsId)
-                            }
-                        }
+                    Timer {
+                        interval: 1000
+                        running: true
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: clock.text =
+                            Qt.formatDateTime(new Date(), "HH:mm  ddd dd MMM")
                     }
                 }
 
-                // active window title ------------------------------------
                 Text {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideMiddle
-                    text: Hyprland.focusedClient
-                        ? Hyprland.focusedClient.title
-                        : ""
+                    text: Hyprland.focusedClient ? Hyprland.focusedClient.title : ""
                     color: cMuted
                     font.pixelSize: 12
-                    font.family: "JetBrainsMono Nerd Font"
+                    font.family: fontFamily
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 320
+                }
+            }
+
+            // CENTER — workspaces
+            RowLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: barBg.verticalCenter
+                spacing: 4
+
+                Repeater {
+                    model: 10
+
+                    Rectangle {
+                        required property int index
+                        readonly property int wsId: index + 1
+                        readonly property bool active:
+                            Hyprland.focusedWorkspace
+                            && Hyprland.focusedWorkspace.id === wsId
+
+                        implicitWidth: 22
+                        implicitHeight: 20
+                        radius: 4
+                        color: active ? cPrimary : "transparent"
+                        border.color: cMuted
+                        border.width: active ? 0 : 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.wsId
+                            color: parent.active ? cBg : cFg
+                            font.pixelSize: 12
+                            font.family: fontFamily
+                            font.bold: true
+                            Component.onCompleted: console.log("workspace ws#" + parent.wsId + " resolved font:", font.family)
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Hyprland.dispatch("workspace " + parent.wsId)
+                        }
+                    }
+                }
+            }
+
+            // RIGHT — system modules + accent picker
+            RowLayout {
+                anchors.right: parent.right
+                anchors.verticalCenter: barBg.verticalCenter
+                anchors.rightMargin: 12
+                spacing: 14
+
+                // volume
+                Text {
+                    text: "  " + volumeText
+                    color: cFg
+                    font.pixelSize: 12
+                    font.family: fontFamily
                 }
 
-                // TEST: Catppuccin Mocha accent picker ---------------------
-                // 14 accent variants. each click writes theme.gtk +
-                // theme.cursor + ui.primary to override (gitignored).
-                // active accent gets a cFg border. R clears override.
+                // bluetooth — only show when connected
+                Text {
+                    text: ""
+                    color: cFg
+                    font.pixelSize: 12
+                    font.family: fontFamily
+                    visible: btConnected
+                }
+
+                // battery — only show if a battery exists
+                Text {
+                    text: "  " + batteryText
+                    color: cFg
+                    font.pixelSize: 12
+                    font.family: fontFamily
+                    visible: batteryText !== ""
+                }
+
+                // separator
+                Rectangle {
+                    implicitWidth: 1
+                    implicitHeight: 16
+                    color: cMuted
+                    visible: true
+                }
+
+                // accent picker (TEST)
                 RowLayout {
                     spacing: 3
 
@@ -232,9 +384,9 @@ ShellRoot {
                             required property var modelData
                             readonly property bool active: cPrimary == modelData.hex
 
-                            implicitWidth: 16
-                            implicitHeight: 16
-                            radius: 8
+                            implicitWidth: 14
+                            implicitHeight: 14
+                            radius: 7
                             color: modelData.hex
                             border.color: active ? cFg : "transparent"
                             border.width: active ? 2 : 0
@@ -249,10 +401,9 @@ ShellRoot {
 
                     Item { implicitWidth: 4 }
 
-                    // reset button
                     Rectangle {
-                        implicitWidth: 18
-                        implicitHeight: 18
+                        implicitWidth: 16
+                        implicitHeight: 16
                         radius: 4
                         color: "transparent"
                         border.color: cMuted
@@ -261,43 +412,15 @@ ShellRoot {
                             anchors.centerIn: parent
                             text: "R"
                             color: cFg
-                            font.pixelSize: 10
+                            font.pixelSize: 9
                             font.bold: true
-                            font.family: "JetBrainsMono Nerd Font"
+                            font.family: fontFamily
                         }
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: clearOverride()
                         }
-                    }
-                }
-
-                // current-primary swatch — always visible, shows live cPrimary
-                Rectangle {
-                    implicitWidth: 20
-                    implicitHeight: 20
-                    radius: 10
-                    color: cPrimary
-                    border.color: cMuted
-                    border.width: 1
-                }
-
-                // clock — tinted with cPrimary so changes are obvious
-                Text {
-                    id: clock
-                    color: cPrimary
-                    font.pixelSize: 13
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.bold: true
-
-                    Timer {
-                        interval: 1000
-                        running: true
-                        repeat: true
-                        triggeredOnStart: true
-                        onTriggered: clock.text =
-                            Qt.formatDateTime(new Date(), "HH:mm  ddd dd MMM")
                     }
                 }
             }
