@@ -365,57 +365,214 @@ ShellRoot {
                     visible: batteryText !== ""
                 }
 
-                // separator
-                Rectangle {
-                    implicitWidth: 1
-                    implicitHeight: 16
-                    color: cMuted
-                    visible: true
+            }
+        }
+    }
+
+    // -- bottom theme switcher panel (hover to reveal) -------------------
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: themeSwitcher
+            required property var modelData
+            screen: modelData
+
+            readonly property int contentWidth:    480
+            readonly property int collapsedHeight: 6
+            readonly property int expandedHeight:  220
+            readonly property int topRadius:       12
+            readonly property int invRadius:       16
+            readonly property int panelTotalWidth: contentWidth + 2 * invRadius
+
+            property bool open: false
+
+            anchors { bottom: true; left: true; right: true }
+            implicitHeight: open ? expandedHeight : collapsedHeight
+            color: "transparent"
+            exclusiveZone: 0
+
+            Behavior on implicitHeight {
+                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+            }
+
+            Item {
+                id: panel
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                width: themeSwitcher.panelTotalWidth
+                height: themeSwitcher.implicitHeight
+
+                // safe top radius: shrinks when panel is small (collapsed) so the
+                // peeking strip looks like a small pill, not a broken oversized arc.
+                readonly property real safeTopRadius:
+                    Math.min(themeSwitcher.topRadius, panel.height / 2)
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: themeSwitcher.open = true
+                    onExited:  themeSwitcher.open = false
                 }
 
-                // accent picker (TEST)
-                RowLayout {
-                    spacing: 3
+                // main panel body — rounded top, sharp bottom. always visible.
+                Shape {
+                    anchors.fill: parent
 
-                    Repeater {
-                        model: mochaAccents
+                    ShapePath {
+                        strokeWidth: 0
+                        fillColor: cBg
 
-                        Rectangle {
-                            required property var modelData
-                            readonly property bool active: cPrimary == modelData.hex
+                        startX: themeSwitcher.invRadius + panel.safeTopRadius
+                        startY: 0
 
-                            implicitWidth: 14
-                            implicitHeight: 14
-                            radius: 7
-                            color: modelData.hex
-                            border.color: active ? cFg : "transparent"
-                            border.width: active ? 2 : 0
+                        PathLine {
+                            x: themeSwitcher.invRadius + themeSwitcher.contentWidth - panel.safeTopRadius
+                            y: 0
+                        }
+                        PathArc {
+                            x: themeSwitcher.invRadius + themeSwitcher.contentWidth
+                            y: panel.safeTopRadius
+                            radiusX: panel.safeTopRadius
+                            radiusY: panel.safeTopRadius
+                        }
+                        PathLine {
+                            x: themeSwitcher.invRadius + themeSwitcher.contentWidth
+                            y: panel.height
+                        }
+                        PathLine { x: themeSwitcher.invRadius; y: panel.height }
+                        PathLine {
+                            x: themeSwitcher.invRadius
+                            y: panel.safeTopRadius
+                        }
+                        PathArc {
+                            x: themeSwitcher.invRadius + panel.safeTopRadius
+                            y: 0
+                            radiusX: panel.safeTopRadius
+                            radiusY: panel.safeTopRadius
+                        }
+                    }
+                }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: setAccent(parent.modelData.name, parent.modelData.hex)
+                // bottom-LEFT inverse corner — fades in only when expanded
+                Shape {
+                    anchors {
+                        left: parent.left
+                        bottom: parent.bottom
+                    }
+                    width: themeSwitcher.invRadius
+                    height: themeSwitcher.invRadius
+                    opacity: panel.height > themeSwitcher.invRadius * 2 ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 160 } }
+
+                    ShapePath {
+                        strokeWidth: 0
+                        fillColor: cBg
+                        startX: themeSwitcher.invRadius
+                        startY: 0
+                        PathLine { x: themeSwitcher.invRadius; y: themeSwitcher.invRadius }
+                        PathLine { x: 0; y: themeSwitcher.invRadius }
+                        PathArc {
+                            x: themeSwitcher.invRadius; y: 0
+                            radiusX: themeSwitcher.invRadius
+                            radiusY: themeSwitcher.invRadius
+                            direction: PathArc.Counterclockwise
+                        }
+                    }
+                }
+
+                // bottom-RIGHT inverse corner — mirror of left
+                Shape {
+                    anchors {
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    width: themeSwitcher.invRadius
+                    height: themeSwitcher.invRadius
+                    opacity: panel.height > themeSwitcher.invRadius * 2 ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 160 } }
+
+                    ShapePath {
+                        strokeWidth: 0
+                        fillColor: cBg
+                        startX: 0
+                        startY: 0
+                        PathLine { x: 0; y: themeSwitcher.invRadius }
+                        PathLine { x: themeSwitcher.invRadius; y: themeSwitcher.invRadius }
+                        PathArc {
+                            x: 0; y: 0
+                            radiusX: themeSwitcher.invRadius
+                            radiusY: themeSwitcher.invRadius
+                            direction: PathArc.Clockwise
+                        }
+                    }
+                }
+
+                // content: title + 14-color grid + reset
+                Column {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: 14
+                    spacing: 14
+                    opacity: Math.max(0,
+                        (panel.height - themeSwitcher.collapsedHeight)
+                        / (themeSwitcher.expandedHeight - themeSwitcher.collapsedHeight))
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "Theme Switcher"
+                        color: cFg
+                        font.pixelSize: 14
+                        font.family: fontFamily
+                        font.bold: true
+                    }
+
+                    Grid {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        columns: 7
+                        rowSpacing: 8
+                        columnSpacing: 8
+
+                        Repeater {
+                            model: mochaAccents
+
+                            Rectangle {
+                                required property var modelData
+                                readonly property bool active: cPrimary == modelData.hex
+
+                                implicitWidth: 36
+                                implicitHeight: 36
+                                radius: 18
+                                color: modelData.hex
+                                border.color: active ? cFg : "transparent"
+                                border.width: active ? 3 : 0
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: setAccent(parent.modelData.name, parent.modelData.hex)
+                                }
                             }
                         }
                     }
 
-                    Item { implicitWidth: 4 }
-
                     Rectangle {
-                        implicitWidth: 16
-                        implicitHeight: 16
-                        radius: 4
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        implicitWidth: 90
+                        implicitHeight: 28
+                        radius: 6
                         color: "transparent"
                         border.color: cMuted
                         border.width: 1
+
                         Text {
                             anchors.centerIn: parent
-                            text: "R"
+                            text: "Reset"
                             color: cFg
-                            font.pixelSize: 9
-                            font.bold: true
+                            font.pixelSize: 12
                             font.family: fontFamily
                         }
+
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
