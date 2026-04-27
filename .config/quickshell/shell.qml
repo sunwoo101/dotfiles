@@ -1,14 +1,17 @@
 //@ pragma UseQApplication
 
+// shell.qml — entry point. Holds shared state (colors, theme, system polling)
+// and instantiates one Bar + one ThemeSwitcher per monitor via Variants.
+// All visible chrome lives in Bar.qml / ThemeSwitcher.qml.
+
 import QtQuick
-import QtQuick.Layouts
-import QtQuick.Shapes
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 
 ShellRoot {
-    // -- two-layer color system ----------------------------------------
+    id: shellRoot
+
+    // -- two-layer color system: base (colors.json) + override (cache) ----
     property string baseContents: ""
     property string overrideContents: ""
 
@@ -17,14 +20,14 @@ ShellRoot {
         path: Quickshell.env("HOME") + "/.config/colors.json"
         watchChanges: true
         onFileChanged: reload()
-        onLoaded: baseContents = text()
+        onLoaded: shellRoot.baseContents = text()
     }
     FileView {
         id: overrideFile
         path: Quickshell.env("HOME") + "/.cache/quickshell/colors-override.json"
         watchChanges: true
         onFileChanged: reload()
-        onLoaded: overrideContents = text()
+        onLoaded: shellRoot.overrideContents = text()
     }
 
     Process {
@@ -66,7 +69,7 @@ ShellRoot {
     property real  cAlpha:   colors ? colors.opacity.bg : 0.7
     property string fontFamily: "JetBrainsMono Nerd Font"
 
-    // -- accent picker (TEST) -------------------------------------------
+    // -- theme state + apply pipeline ------------------------------------
     Process {
         id: writeOverride
         running: false
@@ -83,14 +86,11 @@ ShellRoot {
             "~/dotfiles/scripts/render_configs.sh && ~/dotfiles/scripts/apply_gsettings.sh && ~/dotfiles/scripts/reload_all.sh"
         ]
     }
-    // currentAccent + currentFlavor — used by setAccent / toggleFlavor so each
-    // can re-apply the other's last value when invoked.
+
     property string currentAccent:    "mauve"
     property string currentAccentHex: "#cba6f7"
-    property string currentFlavor:    "mocha"   // "mocha" or "latte"
+    property string currentFlavor:    "mocha"   // "mocha" | "latte"
 
-    // setAccent rebuilds the whole UI palette via apply_palette.py.
-    // Writes theme.{gtk,cursor}, ui.* (palette-tinted), ansi.* (flavor-specific).
     function setAccent(name, hex) {
         currentAccent = name;
         currentAccentHex = hex;
@@ -112,8 +112,6 @@ ShellRoot {
         writeOverride.running = true;
     }
     function clearOverride() {
-        // also reset state so subsequent accent clicks don't carry the
-        // previous flavor (e.g. stuck in Latte after reset).
         currentFlavor = "mocha";
         currentAccent = "mauve";
         currentAccentHex = "#cba6f7";
@@ -142,22 +140,18 @@ ShellRoot {
         { name: "lavender",  hex: "#b4befe" }
     ]
 
-    // -- system module polling -----------------------------------------
-    // simple Process-based polling — reliable across Quickshell versions and
-    // works regardless of audio backend (pipewire/pulseaudio).
+    // -- system module polling -------------------------------------------
     property string volumeText: "??"
     property string batteryText: ""
     property bool   btConnected: false
 
     Timer {
         interval: 2000
-        running: true
-        repeat: true
-        triggeredOnStart: true
+        running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
-            pollVolume.running = true
-            pollBattery.running = true
-            pollBluetooth.running = true
+            pollVolume.running = true;
+            pollBattery.running = true;
+            pollBluetooth.running = true;
         }
     }
 
@@ -167,9 +161,8 @@ ShellRoot {
         command: ["sh", "-c",
             "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | " +
             "awk '{ if($NF==\"[MUTED]\") print \"muted\"; else printf \"%d%%\", $2*100 }'"]
-        stdout: StdioCollector { onStreamFinished: volumeText = text.trim() || "??" }
+        stdout: StdioCollector { onStreamFinished: shellRoot.volumeText = text.trim() || "??" }
     }
-
     Process {
         id: pollBattery
         running: false
@@ -177,467 +170,45 @@ ShellRoot {
             "p=$(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1); " +
             "s=$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1); " +
             "[ -n \"$p\" ] && printf '%s%%%s' \"$p\" \"$([ \"$s\" = Charging ] && echo ' ⚡')\" || echo ''"]
-        stdout: StdioCollector { onStreamFinished: batteryText = text.trim() }
+        stdout: StdioCollector { onStreamFinished: shellRoot.batteryText = text.trim() }
     }
-
     Process {
         id: pollBluetooth
         running: false
         command: ["sh", "-c", "bluetoothctl info 2>/dev/null | head -1"]
-        stdout: StdioCollector { onStreamFinished: btConnected = text.includes("Device") }
+        stdout: StdioCollector { onStreamFinished: shellRoot.btConnected = text.includes("Device") }
     }
 
-    // -- bar (one per monitor) -----------------------------------------
+    // -- per-monitor instances -------------------------------------------
     Variants {
         model: Quickshell.screens
-
-        PanelWindow {
-            id: bar
-            required property var modelData
-            screen: modelData
-
-            readonly property int  barHeight:  38
-            readonly property int  cornerSize: 16  // gaps_out (8) + window rounding (8)
-            readonly property color barColor:  cBg   // dev: opaque (use Qt.rgba(cBg.r,cBg.g,cBg.b,cAlpha) for translucent)
-
-            anchors { top: true; left: true; right: true }
-            implicitHeight: barHeight + cornerSize
-            exclusiveZone: barHeight   // only reserve the bar itself, corners overhang
-            color: "transparent"
-
-            // bar background (top portion)
-            Rectangle {
-                id: barBg
-                anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: bar.barHeight
-                color: bar.barColor
-            }
-
-            // inverse-rounded LEFT corner — extends bar's color past its bottom
-            // edge then curves outward, leaving a window-shaped notch
-            Shape {
-                width: bar.cornerSize
-                height: bar.cornerSize
-                anchors {
-                    left: parent.left
-                    top: parent.top
-                    topMargin: bar.barHeight
-                }
-                ShapePath {
-                    strokeWidth: 0
-                    fillColor: bar.barColor
-                    startX: 0
-                    startY: 0
-                    PathLine { x: bar.cornerSize; y: 0 }
-                    PathArc {
-                        x: 0; y: bar.cornerSize
-                        radiusX: bar.cornerSize
-                        radiusY: bar.cornerSize
-                        direction: PathArc.Counterclockwise
-                    }
-                    PathLine { x: 0; y: 0 }
-                }
-            }
-
-            // inverse-rounded RIGHT corner — mirror of left
-            Shape {
-                width: bar.cornerSize
-                height: bar.cornerSize
-                anchors {
-                    right: parent.right
-                    top: parent.top
-                    topMargin: bar.barHeight
-                }
-                ShapePath {
-                    strokeWidth: 0
-                    fillColor: bar.barColor
-                    startX: 0
-                    startY: 0
-                    PathLine { x: bar.cornerSize; y: 0 }
-                    PathLine { x: bar.cornerSize; y: bar.cornerSize }
-                    PathArc {
-                        x: 0; y: 0
-                        radiusX: bar.cornerSize
-                        radiusY: bar.cornerSize
-                        direction: PathArc.Counterclockwise
-                    }
-                }
-            }
-
-            // LEFT — clock + window title
-            RowLayout {
-                anchors.left: parent.left
-                anchors.verticalCenter: barBg.verticalCenter
-                anchors.leftMargin: 12
-                spacing: 14
-
-                Text {
-                    id: clock
-                    color: cPrimary
-                    font.pixelSize: 13
-                    font.family: fontFamily
-                    font.bold: true
-
-                    Timer {
-                        interval: 1000
-                        running: true
-                        repeat: true
-                        triggeredOnStart: true
-                        onTriggered: clock.text =
-                            Qt.formatDateTime(new Date(), "HH:mm  ddd dd MMM")
-                    }
-                }
-
-                Text {
-                    text: Hyprland.focusedClient ? Hyprland.focusedClient.title : ""
-                    color: cMuted
-                    font.pixelSize: 12
-                    font.family: fontFamily
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 320
-                }
-            }
-
-            // CENTER — workspaces
-            RowLayout {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: barBg.verticalCenter
-                spacing: 4
-
-                Repeater {
-                    model: 10
-
-                    Rectangle {
-                        required property int index
-                        readonly property int wsId: index + 1
-                        readonly property bool active:
-                            Hyprland.focusedWorkspace
-                            && Hyprland.focusedWorkspace.id === wsId
-
-                        implicitWidth: 22
-                        implicitHeight: 20
-                        radius: 4
-                        color: active ? cPrimary : "transparent"
-                        border.color: cMuted
-                        border.width: active ? 0 : 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: parent.wsId
-                            color: parent.active ? cBg : cFg
-                            font.pixelSize: 12
-                            font.family: fontFamily
-                            font.bold: true
-                            Component.onCompleted: console.log("workspace ws#" + parent.wsId + " resolved font:", font.family)
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Hyprland.dispatch("workspace " + parent.wsId)
-                        }
-                    }
-                }
-            }
-
-            // RIGHT — system modules + accent picker
-            RowLayout {
-                anchors.right: parent.right
-                anchors.verticalCenter: barBg.verticalCenter
-                anchors.rightMargin: 12
-                spacing: 14
-
-                // volume
-                Row {
-                    spacing: 4
-                    TintedIcon {
-                        name: volumeText === "muted" ? "audio-volume-muted-symbolic"
-                            : "audio-volume-high-symbolic"
-                        tint: cFg
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: volumeText
-                        color: cFg
-                        font.pixelSize: 12
-                        font.family: fontFamily
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                // bluetooth — only show when connected
-                TintedIcon {
-                    name: "bluetooth-active-symbolic"
-                    tint: cFg
-                    visible: btConnected
-                }
-
-                // battery — only show if a battery exists
-                Row {
-                    spacing: 4
-                    visible: batteryText !== ""
-                    TintedIcon {
-                        name: "battery-good-symbolic"
-                        tint: cFg
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: batteryText
-                        color: cFg
-                        font.pixelSize: 12
-                        font.family: fontFamily
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-            }
+        Bar {
+            modelData: modelData
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            volumeText: shellRoot.volumeText
+            batteryText: shellRoot.batteryText
+            btConnected: shellRoot.btConnected
         }
     }
 
-    // -- bottom theme switcher panel (hover to reveal) -------------------
     Variants {
         model: Quickshell.screens
-
-        PanelWindow {
-            id: themeSwitcher
-            required property var modelData
-            screen: modelData
-
-            readonly property int contentWidth:    480
-            readonly property int collapsedHeight: 6
-            readonly property int expandedHeight:  220
-            readonly property int topRadius:       12
-            readonly property int invRadius:       16
-            readonly property int panelTotalWidth: contentWidth + 2 * invRadius
-
-            property bool open: false
-
-            anchors { bottom: true; left: true; right: true }
-            implicitHeight: open ? expandedHeight : collapsedHeight
-            color: "transparent"
-            exclusiveZone: 0
-
-            Behavior on implicitHeight {
-                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
-            }
-
-            Item {
-                id: panel
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                width: themeSwitcher.panelTotalWidth
-                height: themeSwitcher.implicitHeight
-
-                // safe top radius: shrinks when panel is small (collapsed) so the
-                // peeking strip looks like a small pill, not a broken oversized arc.
-                readonly property real safeTopRadius:
-                    Math.min(themeSwitcher.topRadius, panel.height / 2)
-
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: themeSwitcher.open = true
-                    onExited:  themeSwitcher.open = false
-                }
-
-                // main panel body — rounded top, sharp bottom. always visible.
-                Shape {
-                    anchors.fill: parent
-
-                    ShapePath {
-                        strokeWidth: 0
-                        fillColor: cBg
-
-                        startX: themeSwitcher.invRadius + panel.safeTopRadius
-                        startY: 0
-
-                        PathLine {
-                            x: themeSwitcher.invRadius + themeSwitcher.contentWidth - panel.safeTopRadius
-                            y: 0
-                        }
-                        PathArc {
-                            x: themeSwitcher.invRadius + themeSwitcher.contentWidth
-                            y: panel.safeTopRadius
-                            radiusX: panel.safeTopRadius
-                            radiusY: panel.safeTopRadius
-                        }
-                        PathLine {
-                            x: themeSwitcher.invRadius + themeSwitcher.contentWidth
-                            y: panel.height
-                        }
-                        PathLine { x: themeSwitcher.invRadius; y: panel.height }
-                        PathLine {
-                            x: themeSwitcher.invRadius
-                            y: panel.safeTopRadius
-                        }
-                        PathArc {
-                            x: themeSwitcher.invRadius + panel.safeTopRadius
-                            y: 0
-                            radiusX: panel.safeTopRadius
-                            radiusY: panel.safeTopRadius
-                        }
-                    }
-                }
-
-                // bottom-LEFT inverse corner — fades in only when expanded
-                Shape {
-                    anchors {
-                        left: parent.left
-                        bottom: parent.bottom
-                    }
-                    width: themeSwitcher.invRadius
-                    height: themeSwitcher.invRadius
-                    opacity: panel.height > themeSwitcher.invRadius * 2 ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 160 } }
-
-                    ShapePath {
-                        strokeWidth: 0
-                        fillColor: cBg
-                        startX: themeSwitcher.invRadius
-                        startY: 0
-                        PathLine { x: themeSwitcher.invRadius; y: themeSwitcher.invRadius }
-                        PathLine { x: 0; y: themeSwitcher.invRadius }
-                        PathArc {
-                            x: themeSwitcher.invRadius; y: 0
-                            radiusX: themeSwitcher.invRadius
-                            radiusY: themeSwitcher.invRadius
-                            direction: PathArc.Counterclockwise
-                        }
-                    }
-                }
-
-                // bottom-RIGHT inverse corner — mirror of left
-                Shape {
-                    anchors {
-                        right: parent.right
-                        bottom: parent.bottom
-                    }
-                    width: themeSwitcher.invRadius
-                    height: themeSwitcher.invRadius
-                    opacity: panel.height > themeSwitcher.invRadius * 2 ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 160 } }
-
-                    ShapePath {
-                        strokeWidth: 0
-                        fillColor: cBg
-                        startX: 0
-                        startY: 0
-                        PathLine { x: 0; y: themeSwitcher.invRadius }
-                        PathLine { x: themeSwitcher.invRadius; y: themeSwitcher.invRadius }
-                        PathArc {
-                            x: 0; y: 0
-                            radiusX: themeSwitcher.invRadius
-                            radiusY: themeSwitcher.invRadius
-                            direction: PathArc.Clockwise
-                        }
-                    }
-                }
-
-                // content: title + 14-color grid + reset
-                Column {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.top
-                    anchors.topMargin: 14
-                    spacing: 14
-                    opacity: Math.max(0,
-                        (panel.height - themeSwitcher.collapsedHeight)
-                        / (themeSwitcher.expandedHeight - themeSwitcher.collapsedHeight))
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Theme Switcher"
-                        color: cFg
-                        font.pixelSize: 14
-                        font.family: fontFamily
-                        font.bold: true
-                    }
-
-                    Grid {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        columns: 7
-                        rowSpacing: 8
-                        columnSpacing: 8
-
-                        Repeater {
-                            model: mochaAccents
-
-                            Rectangle {
-                                required property var modelData
-                                readonly property bool active: cPrimary == modelData.hex
-
-                                implicitWidth: 36
-                                implicitHeight: 36
-                                radius: 18
-                                color: modelData.hex
-                                border.color: active ? cFg : "transparent"
-                                border.width: active ? 3 : 0
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: setAccent(parent.modelData.name, parent.modelData.hex)
-                                }
-                            }
-                        }
-                    }
-
-                    Row {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        spacing: 8
-
-                        // dark/light toggle — sun/moon glyphs
-                        Rectangle {
-                            implicitWidth: 36
-                            implicitHeight: 28
-                            radius: 6
-                            color: "transparent"
-                            border.color: cMuted
-                            border.width: 1
-
-                            TintedIcon {
-                                anchors.centerIn: parent
-                                name: currentFlavor === "mocha"
-                                    ? "weather-clear-night-symbolic"
-                                    : "weather-clear-symbolic"
-                                tint: cFg
-                                size: 16
-
-
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: toggleFlavor()
-                            }
-                        }
-
-                        // reset
-                        Rectangle {
-                            implicitWidth: 90
-                            implicitHeight: 28
-                            radius: 6
-                            color: "transparent"
-                            border.color: cMuted
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "Reset"
-                                color: cFg
-                                font.pixelSize: 12
-                                font.family: fontFamily
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: clearOverride()
-                            }
-                        }
-                    }
-                }
-            }
+        ThemeSwitcher {
+            modelData: modelData
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            mochaAccents: shellRoot.mochaAccents
+            currentFlavor: shellRoot.currentFlavor
+            setAccent: (name, hex) => shellRoot.setAccent(name, hex)
+            toggleFlavor: () => shellRoot.toggleFlavor()
+            clearOverride: () => shellRoot.clearOverride()
         }
     }
 }

@@ -39,9 +39,31 @@ The Quickshell `applyChain` Process runs all three. What each app needs:
 - **bash / oh-my-posh** — bash embeds the prompt at init. `bashrc/ohmyposh` installs a `SIGUSR1` trap that re-runs `oh-my-posh init`. `reload_all.sh` does `pkill -USR1 -x bash`.
 - **GTK apps** — **no live reload exists**. Apps cache theme at startup. gsettings notifications reach libadwaita apps but not custom CSS. Restart the app.
 
-## Quickshell (`.config/quickshell/shell.qml`)
+## Quickshell (`.config/quickshell/`)
 
-Single QML file: bar + bottom theme switcher.
+Multi-file structure. Each PanelWindow lives in its own file; `shell.qml` only holds shared state and instantiates them via `Variants`.
+
+```
+.config/quickshell/
+├── shell.qml          # entry point: state (colors, theme, system polling) + Variants
+├── Bar.qml            # top bar PanelWindow (workspaces, clock, title, modules, corners)
+├── ThemeSwitcher.qml  # bottom hover-reveal panel (accent grid, dark/light, reset)
+└── TintedIcon.qml     # reusable: IconImage from active icon theme + MultiEffect tint
+```
+
+**State stays in `shell.qml`** — colors loading (FileView × 2), `cBg`/`cFg`/`cPrimary`/etc., theme state (`currentAccent`, `currentFlavor`), action functions (`setAccent`, `toggleFlavor`, `clearOverride`), system polling (`volumeText`, `batteryText`, `btConnected`). Children declare `required property` for what they need; `shell.qml` passes them via the Variants delegate.
+
+**Action callbacks** are passed as arrow-wrapped function properties:
+
+```qml
+ThemeSwitcher {
+    setAccent: (name, hex) => shellRoot.setAccent(name, hex)
+}
+```
+
+The arrow wrapping captures `shellRoot` so `this` doesn't get lost.
+
+**Adding a new modal** (notifications, launcher, lock): write `Foo.qml`, add a third `Variants { Foo { ... } }` block in `shell.qml`. No edits to existing files.
 
 ### Critical gotcha: `FileView.text` is a method, not a property
 
