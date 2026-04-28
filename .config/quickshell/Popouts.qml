@@ -1,0 +1,368 @@
+// Popouts — single PanelWindow that hosts every top-bar drop-down popout
+// (volume, notifications, calendar, power). The wrapper window stays
+// mounted; switching is a morph: animate panel.x, .width, .height in
+// lockstep while content fades. Same window — no parallel-window jitter,
+// no inverse-corner separation.
+//
+// Each popout has an anchor — where its panel aligns along the bar:
+//   • side "right": panel right edge at anchor X (volume, notifications)
+//   • side "left":  panel left  edge at anchor X (calendar, power)
+//
+// Corners adapt:
+//   • Outer (top) corners: inverse (carve into bar) when not at a screen
+//     edge; flush at the screen edge.
+//   • Bottom corners: rounded when not at a screen edge; flush otherwise.
+
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Shapes
+import Quickshell
+import Quickshell.Wayland
+
+PanelWindow {
+    id: root
+
+    required property var modelData
+    required property color cBg
+    required property color cFg
+    required property color cPrimary
+    required property color cMuted
+    required property string fontFamily
+
+    // Which side of the bar this wrapper handles. "right" hosts volume +
+    // notifications; "left" hosts calendar + power. Two separate wrappers
+    // are instantiated so cross-side hover (e.g. calendar → volume) is a
+    // close-and-open of two independent windows, not a slide across the
+    // screen with one wrapper.
+    required property string side          // "left" | "right"
+
+    required property string current       // global popout name (or "")
+    required property var notifServer
+    required property var popped
+    required property var notifReceivedAt
+    required property real now
+    required property var expireCallback
+    required property var clearAllCallback
+
+    // anchor X positions (screen coords) supplied by Bar
+    property real volumeRightX: 0
+    property real bellRightX:   0
+    property real clockLeftX:   0
+    property real powerLeftX:   0
+
+    signal panelEnter()
+    signal panelLeave()
+    signal requestClose()
+
+    screen: modelData
+    color: "transparent"
+    // 0 makes the popout respect the bar's reserved exclusive zone, so
+    // the popout's surface starts at screen y = barHeight (no overlap).
+    // The mask below covers the full panel area in root coords (which
+    // already starts below the bar — no offset needed).
+    exclusiveZone: 0
+    WlrLayershell.layer: WlrLayershell.Overlay
+
+    readonly property int barHeight:    48
+    readonly property int invRadius:    18
+    readonly property int cornerRadius: 14
+    readonly property int animDuration: 280
+
+    // Only handle popouts that belong to OUR side.
+    function _config(name) {
+        if (name === "volume" && side === "right")
+            return { side: "right", anchor: volumeRightX, item: volumeLoader.item };
+        if (name === "notifications" && side === "right")
+            return { side: "right", anchor: root.width,   item: notifLoader.item };
+        if (name === "calendar" && side === "left")
+            return { side: "left",  anchor: clockLeftX,   item: calLoader.item };
+        if (name === "power" && side === "left")
+            return { side: "left",  anchor: powerLeftX,   item: powerLoader.item };
+        return null;
+    }
+    readonly property var curConfig: _config(current)
+    readonly property bool _isOpen: curConfig !== null
+    readonly property real _targetW: curConfig && curConfig.item ? curConfig.item.implicitWidth  : 0
+    readonly property real _targetH: curConfig && curConfig.item ? curConfig.item.implicitHeight : 0
+
+    // Edge detection: the "outer" side (opposite the anchor) is never at
+    // a screen edge in any reasonable layout, so derive from side+anchor
+    // only — avoids the circular dependency with panel.width.
+    readonly property bool _leftAtEdge:
+        curConfig && curConfig.side === "left"  && Math.abs(curConfig.anchor) < 1
+    readonly property bool _rightAtEdge:
+        curConfig && curConfig.side === "right" && Math.abs(curConfig.anchor - root.width) < 1
+
+    // Panel width = content width + invRadius for each non-flush top corner.
+    readonly property int _panelWidth: _isOpen
+        ? _targetW
+            + (_leftAtEdge  ? 0 : invRadius)
+            + (_rightAtEdge ? 0 : invRadius)
+        : 0
+
+    // The anchor X passed in (volumeRightX, clockLeftX, etc.) is the icon
+    // edge — the edge of the *visible body*. Outside that, the panel
+    // extends by invRadius for the carved corner. So when we position
+    // panel.x, we add invRadius on the anchor side so the body edge,
+    // not the outer panel edge, lines up with the icon edge.
+    readonly property int _anchorInset: {
+        if (!curConfig) return 0;
+        if (curConfig.side === "right") return _rightAtEdge ? 0 : invRadius;
+        if (curConfig.side === "left")  return _leftAtEdge  ? 0 : invRadius;
+        return 0;
+    }
+
+    // _activeAnchor is the panel's anchor edge X. It must stay pinned
+    // during open and close (right edge fixed at volumeRightX while
+    // width grows/shrinks), and animate during a switch between two
+    // popouts on the same side (volume → notif). We can't get this with
+    // a plain Behavior — opening would animate the anchor from 0/last
+    // and the panel would visibly slide in. Manage it imperatively.
+    property real _activeAnchor: 0
+    property var _prevCur: null
+    Behavior on _activeAnchor {
+        id: _anchorBehavior
+        NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+    }
+    Connections {
+        target: root
+        function onCurConfigChanged() {
+            var prev = root._prevCur;
+            var cur = root.curConfig;
+            root._prevCur = cur;
+            var screenEdge = root.side === "right" ? root.width : 0;
+            if (!cur) {
+                // closing — slide the anchor edge out toward the screen edge
+                root._activeAnchor = screenEdge;
+                return;
+            }
+            if (!prev) {
+                // opening from closed — snap to the screen edge first (so
+                // we don't animate from wherever we last closed), then
+                // animate to the target. The two assignments inside the
+                // same handler trigger the Behavior on the second one.
+                _anchorBehavior.enabled = false;
+                root._activeAnchor = screenEdge;
+                _anchorBehavior.enabled = true;
+                root._activeAnchor = cur.anchor;
+                return;
+            }
+            // switching between two popouts on the same side — animate.
+            root._activeAnchor = cur.anchor;
+        }
+    }
+
+    // -- root window ---------------------------------------------------
+    anchors { top: true; left: true; right: true }
+    margins.top: 0
+    implicitHeight: _isOpen ? _targetH : 0
+    Behavior on implicitHeight {
+        NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+    }
+
+    // input mask: panel area only — passes input on regions outside the
+    // panel through to whatever's below. The popout doesn't overlap the
+    // bar (exclusiveZone: 0 keeps it below), so we don't need to cut a
+    // bar strip; the mask covers the full panel rect.
+    mask: Region {
+        x: panel.x
+        y: 0
+        width: panel.width
+        height: panel.height
+    }
+
+    // root-level HoverHandler — tracks hover across the entire input mask
+    // region. Previously this was on `panel`, which has clip:true and may
+    // interfere with hover tracking near the edges; root window doesn't.
+    HoverHandler {
+        onHoveredChanged: hovered ? root.panelEnter() : root.panelLeave()
+    }
+
+    // -- panel ---------------------------------------------------------
+    Item {
+        id: panel
+
+        // x is bound to (anchor - live width) for right side, or just
+        // anchor for left side. There's NO Behavior on x — instead, x
+        // tracks panel.width which has the Behavior. So as width grows
+        // 0 → target via the animation, x = anchor - width follows
+        // naturally; the anchor edge stays put and the panel grows
+        // away from it.
+        x: root.side === "right"
+            ? root._activeAnchor - panel.width + root._anchorInset
+            : root._activeAnchor - root._anchorInset
+        width:  root._panelWidth
+        height: root.implicitHeight
+        anchors.top: parent.top
+
+        Behavior on width {
+            NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+        }
+
+        clip: true   // hide content overflow during morph
+        // HoverHandler is at root level (above) — keeps it independent of
+        // this Item's clip and explicit width/x animations.
+
+        Shape {
+            anchors.fill: parent
+            ShapePath {
+                strokeWidth: 0
+                fillColor: root.cBg
+                PathSvg { path: root._svgPath }
+            }
+        }
+
+        Item {
+            id: contentArea
+            anchors.fill: parent
+            anchors.leftMargin:  root._leftAtEdge  ? 0 : root.invRadius
+            anchors.rightMargin: root._rightAtEdge ? 0 : root.invRadius
+
+            // Right-pinned content (right-side popouts).
+            Loader {
+                id: volumeLoader
+                anchors.right: parent.right
+                anchors.top:   parent.top
+                width:  item ? item.implicitWidth  : 0
+                height: item ? item.implicitHeight : 0
+                active: root.side === "right"
+                opacity: root.current === "volume" ? 1 : 0
+                // Disable input when not the active popout — otherwise
+                // clicks pass through the visible content to whichever
+                // Loader is behind. ESPECIALLY important for Power, which
+                // has shutdown/reboot/logout under invisible CardButtons.
+                enabled: root.current === "volume"
+                // Bump active Loader z above sibling Loaders so hover
+                // events reach its descendants. On Qt6/Wayland, click
+                // events propagate through disabled siblings but hover
+                // events do NOT — without this z bump, an overlapping
+                // disabled Loader (e.g. Power's 520×160 footprint) blocks
+                // hover for the active popout's small buttons.
+                z: root.current === "volume" ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+                }
+                sourceComponent: VolumeContent {
+                    cFg: root.cFg
+                    cPrimary: root.cPrimary
+                    cMuted: root.cMuted
+                    fontFamily: root.fontFamily
+                }
+            }
+            Loader {
+                id: notifLoader
+                anchors.right: parent.right
+                anchors.top:   parent.top
+                width:  item ? item.implicitWidth  : 0
+                height: item ? item.implicitHeight : 0
+                active: root.side === "right"
+                opacity: root.current === "notifications" ? 1 : 0
+                enabled: root.current === "notifications"
+                z: root.current === "notifications" ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+                }
+                sourceComponent: NotificationsContent {
+                    notifServer:      root.notifServer
+                    popped:           root.popped
+                    notifReceivedAt:  root.notifReceivedAt
+                    now:              root.now
+                    expireCallback:   root.expireCallback
+                    clearAllCallback: root.clearAllCallback
+                    hovered:          root.current === "notifications"
+                    cFg:              root.cFg
+                    cPrimary:         root.cPrimary
+                    cMuted:           root.cMuted
+                    fontFamily:       root.fontFamily
+                }
+            }
+            // Left-pinned content (left-side popouts).
+            Loader {
+                id: calLoader
+                anchors.left: parent.left
+                anchors.top:  parent.top
+                width:  item ? item.implicitWidth  : 0
+                height: item ? item.implicitHeight : 0
+                active: root.side === "left"
+                opacity: root.current === "calendar" ? 1 : 0
+                enabled: root.current === "calendar"
+                z: root.current === "calendar" ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+                }
+                sourceComponent: CalendarContent {
+                    cBg: root.cBg
+                    cFg: root.cFg
+                    cPrimary: root.cPrimary
+                    cMuted: root.cMuted
+                    fontFamily: root.fontFamily
+                }
+            }
+            Loader {
+                id: powerLoader
+                anchors.left: parent.left
+                anchors.top:  parent.top
+                width:  item ? item.implicitWidth  : 0
+                height: item ? item.implicitHeight : 0
+                active: root.side === "left"
+                opacity: root.current === "power" ? 1 : 0
+                enabled: root.current === "power"
+                z: root.current === "power" ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+                }
+                sourceComponent: PowerMenuContent {
+                    cFg: root.cFg
+                    cPrimary: root.cPrimary
+                    cMuted: root.cMuted
+                    fontFamily: root.fontFamily
+                    onRequestClose: root.requestClose()
+                }
+            }
+        }
+    }
+
+    // -- SVG path: clockwise from TL. Inverse top corners + rounded
+    // bottom corners on sides not at a screen edge; flush on sides that
+    // are. Three real cases:
+    //   both-sides-inverse (volume, calendar)
+    //   right at edge       (notifications: TR/BR flush)
+    //   left  at edge       (power: TL/BL flush)
+    readonly property string _svgPath: {
+        var W = panel.width;
+        var H = panel.height;
+        var R  = Math.min(invRadius,    H / 2);
+        var bR = Math.min(cornerRadius, H / 2);
+        var L = root._leftAtEdge;
+        var Re = root._rightAtEdge;
+
+        var p = "M 0 0 ";
+        p += "L " + W + " 0 ";
+
+        if (Re) {
+            // right side flush — straight down from (W, 0) to (W, H)
+            p += "L " + W + " " + H + " ";
+        } else {
+            // TR inverse + BR rounded
+            p += "A " + R + " " + R + " 0 0 0 " + (W - R) + " " + R + " ";
+            p += "L " + (W - R) + " " + (H - bR) + " ";
+            p += "A " + bR + " " + bR + " 0 0 1 " + (W - R - bR) + " " + H + " ";
+        }
+
+        var bottomEndX = L ? 0 : (R + bR);
+        p += "L " + bottomEndX + " " + H + " ";
+
+        if (L) {
+            // left side flush — straight up from (0, H) to (0, 0)
+            p += "L 0 0 ";
+        } else {
+            // BL rounded + TL inverse
+            p += "A " + bR + " " + bR + " 0 0 1 " + R + " " + (H - bR) + " ";
+            p += "L " + R + " " + R + " ";
+            p += "A " + R + " " + R + " 0 0 0 0 0 ";
+        }
+
+        p += "Z";
+        return p;
+    }
+}

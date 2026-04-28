@@ -235,6 +235,23 @@ home_dir = os.path.join(repo, "home")
 os.makedirs(home_dir, exist_ok=True)
 with open(os.path.join(home_dir, ".gtkrc-2.0"), "w") as f:
     f.write(gtkrc2)
+
+# hyprland color include — sourced from hypr/conf/visuals.conf so the
+# focused-window border picks up the active accent on theme switches.
+def hyprland_hex(h):
+    # hyprland color literals: 0x<aa><rr><gg><bb> (alpha first, fully opaque).
+    return f"rgba({h.lstrip('#').lower()}ff)"
+
+hypr_dir = os.path.join(base, "hypr", "conf")
+os.makedirs(hypr_dir, exist_ok=True)
+with open(os.path.join(hypr_dir, "colors.conf"), "w") as f:
+    f.write("# generated from colors.json — do not edit\n")
+    f.write(f"$ACCENT  = {hyprland_hex(ui['accent'])}\n")
+    f.write(f"$PRIMARY = {hyprland_hex(ui['primary'])}\n")
+    f.write(f"$BG      = {hyprland_hex(ui['bg'])}\n")
+    f.write(f"$FG      = {hyprland_hex(ui['fg'])}\n")
+    f.write(f"$MUTED   = {hyprland_hex(ui['muted'])}\n")
+    f.write(f"$BORDER  = {hyprland_hex(ui['border'])}\n")
 PY
 
 echo "generated configs from colors.json"

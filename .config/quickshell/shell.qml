@@ -8,6 +8,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
+import Quickshell.Services.Pipewire
+import Quickshell.Services.Mpris
 
 ShellRoot {
     id: shellRoot
@@ -84,16 +86,16 @@ ShellRoot {
         return merged;
     }
 
-    property real  cAlpha:   colors ? colors.opacity.bg : 0.7
+    property real  cAlpha:   colors ? colors.opacity.bg : 1.0
     property color cBg: {
-        var c = Qt.color(colors ? colors.ui.bg : "#1e1e2e");
+        var c = Qt.color(colors ? colors.ui.bg : "#ff0000");
         return Qt.rgba(c.r, c.g, c.b, cAlpha);
     }
-    property color cFg:      colors ? colors.ui.fg      : "#cdd6f4"
-    property color cPrimary: colors ? colors.ui.primary : "#cba6f7"
-    property color cAccent:  colors ? colors.ui.accent  : "#f5c2e7"
-    property color cMuted:   colors ? colors.ui.muted   : "#6c7086"
-    property color cRed:     colors ? colors.ansi.red   : "#f38ba8"
+    property color cFg:      colors ? colors.ui.fg      : "#ff0000"
+    property color cPrimary: colors ? colors.ui.primary : "#ff0000"
+    property color cAccent:  colors ? colors.ui.accent  : "#ff0000"
+    property color cMuted:   colors ? colors.ui.muted   : "#ff0000"
+    property color cRed:     colors ? colors.ansi.red   : "#ff0000"
     property string fontFamily: "JetBrainsMono Nerd Font"
 
     // -- theme state + apply pipeline ------------------------------------
@@ -105,6 +107,10 @@ ShellRoot {
             applyChain.running = true;
         }
     }
+    // Flips to true after the first apply chain run completes. Used to gate
+    // per-screen component instantiation so nothing paints with the launch
+    // fallback color.
+    property bool appliedReady: false
     Process {
         id: applyChain
         running: false
@@ -112,6 +118,7 @@ ShellRoot {
             "sh", "-c",
             "~/dotfiles/scripts/render_configs.sh && ~/dotfiles/scripts/apply_gsettings.sh && ~/dotfiles/scripts/reload_all.sh"
         ]
+        onExited: shellRoot.appliedReady = true
     }
 
     property string currentAccent:    "mauve"
@@ -125,29 +132,32 @@ ShellRoot {
     // merge) but stale generated files from the previous session.
     function hydrateFromOverride() {
         var over = safeParse(overrideContents);
-        // theme.gtk looks like "catppuccin-{flavor}-{accent}-standard+default"
         var gtk = over && over.theme ? over.theme.gtk : null;
-        if (gtk) {
-            var m = /^catppuccin-(mocha|latte)-([a-z]+)-/.exec(gtk);
-            if (m) {
-                currentFlavor = m[1];
-                currentAccent = m[2];
-            }
-        }
-        if (over && over.ui && over.ui.primary) {
-            currentAccentHex = over.ui.primary;
-        }
-        applyPalette();
+        // theme.gtk looks like "catppuccin-{flavor}-{accent}-standard+default"
+        var m = gtk ? /^catppuccin-(mocha|latte)-([a-z]+)-/.exec(gtk) : null;
+        var flavor = m ? m[1] : currentFlavor;
+        var accent = m ? m[2] : currentAccent;
+        var hex    = over && over.ui && over.ui.primary
+            ? over.ui.primary
+            : currentAccentHex;
+        applyTheme(flavor, accent, hex);
     }
 
-    function setAccent(name, hex) {
-        currentAccent = name;
+    // Single entry point — every theme change (accent click, dark/light
+    // toggle, launch hydrate) goes through this so the chain runs in exactly
+    // one shape: state mutation → applyPalette → writeOverride → applyChain.
+    function applyTheme(flavor, accent, hex) {
+        currentFlavor    = flavor;
+        currentAccent    = accent;
         currentAccentHex = hex;
         applyPalette();
     }
+    function setAccent(name, hex) {
+        applyTheme(currentFlavor, name, hex);
+    }
     function toggleFlavor() {
-        currentFlavor = currentFlavor === "mocha" ? "latte" : "mocha";
-        applyPalette();
+        applyTheme(currentFlavor === "mocha" ? "latte" : "mocha",
+                   currentAccent, currentAccentHex);
     }
     function applyPalette() {
         writeOverride.running = false;
@@ -190,27 +200,26 @@ ShellRoot {
     ]
 
     // -- system module polling -------------------------------------------
-    property string volumeText: "??"
+    // Volume is reactive via Pipewire service — no polling. Battery and
+    // bluetooth still poll because we don't have reactive sources wired up.
     property string batteryText: ""
     property bool   btConnected: false
+
+    readonly property var _sink: Pipewire.defaultAudioSink
+    PwObjectTracker { objects: _sink ? [_sink] : [] }
+    readonly property string volumeText: {
+        if (!_sink || !_sink.audio) return "??";
+        if (_sink.audio.muted) return "muted";
+        return Math.round(_sink.audio.volume * 100) + "%";
+    }
 
     Timer {
         interval: 2000
         running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
-            pollVolume.running = true;
             pollBattery.running = true;
             pollBluetooth.running = true;
         }
-    }
-
-    Process {
-        id: pollVolume
-        running: false
-        command: ["sh", "-c",
-            "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | " +
-            "awk '{ if($NF==\"[MUTED]\") print \"muted\"; else printf \"%d%%\", $2*100 }'"]
-        stdout: StdioCollector { onStreamFinished: shellRoot.volumeText = text.trim() || "??" }
     }
     Process {
         id: pollBattery
@@ -228,28 +237,103 @@ ShellRoot {
         stdout: StdioCollector { onStreamFinished: shellRoot.btConnected = text.includes("Device") }
     }
 
-    // -- notification center hover state ---------------------------------
-    // shared by the Bar's bell + Notifications panel so hover-from-bell-to-panel
-    // doesn't immediately close. Close-timer gives a 250ms grace period.
-    property bool notifOpen: false
+    // -- unified bar-popout state ----------------------------------------
+    // All top-bar drop-downs (volume, notifications, calendar, power)
+    // share one Popouts wrapper that morphs between them. `popoutHover`
+    // is what the user's currently hovering. `popoutCurrent` is what we
+    // actually show — falls back to "notifications" if there are popped
+    // notifs and nothing else is hovered, so they auto-pop without hover.
+    // IPC can also force a name (e.g. `qs ipc call power toggle`).
+    property string popoutHover: ""
+    property string popoutForced: ""   // set by IPC; cleared on hover
+    // Hover-source depth counter: each icon's onEntered / each panel
+    // HoverHandler hovered=true increments; the corresponding leave
+    // decrements. The close timer only restarts when depth hits 0.
+    // Without this, event-ordering quirks (icon B's onEntered firing
+    // before icon A's onExited) caused the popout to "open then
+    // instantly close" while sweeping between adjacent triggers.
+    property int _hoverDepth: 0
     Timer {
-        id: notifCloseTimer
+        id: popoutCloseTimer
         interval: 250
-        onTriggered: shellRoot.notifOpen = false
+        onTriggered: { shellRoot.popoutHover = ""; shellRoot.popoutForced = ""; }
     }
-    function notifEnter() { notifCloseTimer.stop(); notifOpen = true; }
-    function notifLeave() { notifCloseTimer.restart(); }
+    function popoutEnter(name) {
+        _hoverDepth += 1;
+        popoutCloseTimer.stop();
+        popoutHover = name;
+        popoutForced = "";   // hover overrides IPC
+    }
+    function popoutLeave() {
+        _hoverDepth = Math.max(0, _hoverDepth - 1);
+        if (_hoverDepth === 0) popoutCloseTimer.restart();
+    }
+    function popoutShow(name) {
+        popoutCloseTimer.stop();
+        popoutForced = name;
+        popoutHover = "";
+    }
+    function popoutHide() {
+        popoutForced = "";
+        popoutHover = "";
+        _hoverDepth = 0;
+        popoutCloseTimer.stop();
+    }
+
+    readonly property string popoutCurrent: {
+        if (popoutHover) return popoutHover;
+        if (popoutForced) return popoutForced;
+        if (popped.length > 0) return "notifications";
+        return "";
+    }
+    // Bar reads these for icon highlight when the matching popout is shown.
+    readonly property bool notifOpen:    popoutCurrent === "notifications"
+    readonly property bool volumeOpen:   popoutCurrent === "volume"
+    readonly property bool calendarOpen: popoutCurrent === "calendar"
+    readonly property bool powerOpen:    popoutCurrent === "power"
 
     // -- notification daemon ---------------------------------------------
     // registers as the freedesktop notification server (replaces swaync). new
     // notifications are tracked (so the center can render them) AND pushed to
     // `popped` for ~5s so the panel auto-pops in compact form.
     property var popped: []
+
+    // Per-notification arrival timestamp, keyed by Notification.id (uint32
+    // from the D-Bus protocol). Reassigned wholesale on insert/delete so
+    // QML re-evaluates bound age labels. _notifNow ticks every 30 s — coarse
+    // enough to not redraw constantly, fine enough that "Xm ago" stays right.
+    property var notifReceivedAt: ({})
+    property real _notifNow: Date.now()
+    Timer {
+        interval: 30000
+        running: true; repeat: true
+        onTriggered: shellRoot._notifNow = Date.now()
+    }
+
     function popNotif(n) {
+        var copy = Object.assign({}, notifReceivedAt);
+        copy[n.id] = Date.now();
+        notifReceivedAt = copy;
+
         popped = [...popped, n];
+        // remove from popped the moment the notification closes (e.g. when
+        // a default action invocation causes the sender to close it),
+        // otherwise popped would hold a dangling pointer until the 5s timer
+        // fires — accessing it crashes Quickshell during Repeater regenerate.
+        n.closed.connect(() => {
+            shellRoot.expirePopped(n);
+            var c2 = Object.assign({}, shellRoot.notifReceivedAt);
+            delete c2[n.id];
+            shellRoot.notifReceivedAt = c2;
+        });
         popTimerComp.createObject(shellRoot, { notif: n });
     }
     function expirePopped(n) { popped = popped.filter(x => x !== n); }
+    function clearAllNotifs() {
+        var all = notifSrv.trackedNotifications.values.slice();
+        for (var i = 0; i < all.length; i++) all[i].dismiss();
+        popped = [];
+    }
 
     Component {
         id: popTimerComp
@@ -279,27 +363,16 @@ ShellRoot {
         function toggle() { shellRoot.launcherToggle(); }
     }
 
-    // -- power menu state + IPC ------------------------------------------
-    // hover-driven from the bar's top-left power button (mirror of notifs).
-    // Also exposes IPC for `qs ipc call power show|hide|toggle`.
-    property bool powerOpen: false
-    function powerShow()   { powerOpen = true;  }
-    function powerHide()   { powerOpen = false; }
-    function powerToggle() { powerOpen = !powerOpen; }
-
-    Timer {
-        id: powerCloseTimer
-        interval: 250
-        onTriggered: shellRoot.powerOpen = false
-    }
-    function powerEnter() { powerCloseTimer.stop(); powerOpen = true; }
-    function powerLeave() { powerCloseTimer.restart(); }
-
+    // PowerMenu is now part of the unified Popouts wrapper. IPC bridges
+    // into popoutShow/Hide/Toggle keyed by name = "power".
     IpcHandler {
         target: "power"
-        function show()   { shellRoot.powerShow();   }
-        function hide()   { shellRoot.powerHide();   }
-        function toggle() { shellRoot.powerToggle(); }
+        function show()   { shellRoot.popoutShow("power");                              }
+        function hide()   { shellRoot.popoutHide();                                     }
+        function toggle() {
+            if (shellRoot.popoutCurrent === "power") shellRoot.popoutHide();
+            else shellRoot.popoutShow("power");
+        }
     }
 
     // -- session lock + IPC ----------------------------------------------
@@ -335,9 +408,34 @@ ShellRoot {
     }
 
     // -- per-monitor instances -------------------------------------------
+    // -- ready gate ------------------------------------------------------
+    // Hold off instantiating any per-screen components until colors are
+    // loaded. Otherwise QtQuick.Shape paints once with the fallback color
+    // and won't repaint on subsequent fillColor binding updates, leaving
+    // the bar's inverse corners and theme-switcher peek strip stuck on the
+    // launch fallback color.
+    readonly property var _screensWhenReady:
+        (appliedReady && colors !== null) ? Quickshell.screens : []
+
+    // Per-screen anchor map. Bar updates its X positions on change,
+    // Popouts reads by screen name. Reassigning the whole object (vs
+    // mutating in place) is what makes QML re-evaluate the bindings.
+    property var _barAnchors: ({})
+    function _setBarAnchor(name, b) {
+        var copy = Object.assign({}, _barAnchors);
+        copy[name] = {
+            volumeRightX: b.volumeRightX,
+            bellRightX:   b.bellRightX,
+            clockLeftX:   b.clockLeftX,
+            powerLeftX:   b.powerLeftX
+        };
+        _barAnchors = copy;
+    }
+
     Variants {
-        model: Quickshell.screens
+        model: _screensWhenReady
         Bar {
+            id: bar
             modelData: modelData
             cBg: shellRoot.cBg
             cFg: shellRoot.cFg
@@ -348,15 +446,101 @@ ShellRoot {
             batteryText: shellRoot.batteryText
             btConnected: shellRoot.btConnected
             notifCount: notifSrv.trackedNotifications.values.length
-            onBellEnter:  shellRoot.notifEnter()
-            onBellLeave:  shellRoot.notifLeave()
-            onPowerEnter: shellRoot.powerEnter()
-            onPowerLeave: shellRoot.powerLeave()
+            notifOpen:    shellRoot.notifOpen
+            powerOpen:    shellRoot.powerOpen
+            volumeOpen:   shellRoot.volumeOpen
+            calendarOpen: shellRoot.calendarOpen
+            onPopoutEnter: (name) => shellRoot.popoutEnter(name)
+            onPopoutLeave: shellRoot.popoutLeave()
+            onVolumeRightXChanged: shellRoot._setBarAnchor(modelData.name, bar)
+            onBellRightXChanged:   shellRoot._setBarAnchor(modelData.name, bar)
+            onClockLeftXChanged:   shellRoot._setBarAnchor(modelData.name, bar)
+            Component.onCompleted: shellRoot._setBarAnchor(modelData.name, bar)
         }
     }
 
+    // Two Popouts wrappers per screen — one for each side of the bar.
+    // Cross-side hover (e.g. calendar → volume) is a close-and-open of
+    // two independent windows; no panel slides across the screen.
     Variants {
-        model: Quickshell.screens
+        model: _screensWhenReady
+        Popouts {
+            modelData: modelData
+            side: "right"
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            current: shellRoot.popoutCurrent
+            notifServer: notifSrv
+            popped: shellRoot.popped
+            notifReceivedAt: shellRoot.notifReceivedAt
+            now: shellRoot._notifNow
+            expireCallback:   (n) => shellRoot.expirePopped(n)
+            clearAllCallback: () => shellRoot.clearAllNotifs()
+            volumeRightX: {
+                var a = shellRoot._barAnchors[modelData.name];
+                return a ? a.volumeRightX : 0;
+            }
+            bellRightX: {
+                var a = shellRoot._barAnchors[modelData.name];
+                return a ? a.bellRightX : 0;
+            }
+            onPanelEnter:   shellRoot.popoutEnter(shellRoot.popoutCurrent || "notifications")
+            onPanelLeave:   shellRoot.popoutLeave()
+            onRequestClose: shellRoot.popoutHide()
+        }
+    }
+    Variants {
+        model: _screensWhenReady
+        Popouts {
+            modelData: modelData
+            side: "left"
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            current: shellRoot.popoutCurrent
+            notifServer: notifSrv
+            popped: shellRoot.popped
+            notifReceivedAt: shellRoot.notifReceivedAt
+            now: shellRoot._notifNow
+            expireCallback:   (n) => shellRoot.expirePopped(n)
+            clearAllCallback: () => shellRoot.clearAllNotifs()
+            clockLeftX: {
+                var a = shellRoot._barAnchors[modelData.name];
+                return a ? a.clockLeftX : 0;
+            }
+            powerLeftX: {
+                var a = shellRoot._barAnchors[modelData.name];
+                return a ? a.powerLeftX : 0;
+            }
+            onPanelEnter:   shellRoot.popoutEnter(shellRoot.popoutCurrent || "calendar")
+            onPanelLeave:   shellRoot.popoutLeave()
+            onRequestClose: shellRoot.popoutHide()
+        }
+    }
+
+    // -- EdgeBumper hover registry --------------------------------------
+    // Generic per-(modal, screen) hover state. Each non-bar modal that uses
+    // an EdgeBumper picks a unique name string and reads/writes through
+    // these helpers; map reassignment (vs in-place mutation) is what makes
+    // QML re-evaluate the bound externalHovered properties.
+    property var _bumperHover: ({})
+    function _bumperKey(name, screenName) { return name + "::" + screenName; }
+    function _setBumperHover(name, screenName, hovered) {
+        var copy = Object.assign({}, _bumperHover);
+        copy[_bumperKey(name, screenName)] = hovered;
+        _bumperHover = copy;
+    }
+    function _bumperHovered(name, screenName) {
+        return _bumperHover[_bumperKey(name, screenName)] === true;
+    }
+
+    Variants {
+        model: _screensWhenReady
         ThemeSwitcher {
             modelData: modelData
             cBg: shellRoot.cBg
@@ -369,11 +553,24 @@ ShellRoot {
             setAccent: (name, hex) => shellRoot.setAccent(name, hex)
             toggleFlavor: () => shellRoot.toggleFlavor()
             clearOverride: () => shellRoot.clearOverride()
+            externalHovered: shellRoot._bumperHovered("themeSwitcher", modelData.name)
         }
     }
 
     Variants {
-        model: Quickshell.screens
+        model: _screensWhenReady
+        EdgeBumper {
+            modelData: modelData
+            edge: "bottom"
+            hitWidth: 596    // matches ThemeSwitcher.panelTotalWidth
+            onBumperEnter: shellRoot._setBumperHover("themeSwitcher", modelData.name, true)
+            onBumperLeave: shellRoot._setBumperHover("themeSwitcher", modelData.name, false)
+        }
+    }
+
+
+    Variants {
+        model: _screensWhenReady
         AppLauncher {
             modelData: modelData
             cBg: shellRoot.cBg
@@ -386,37 +583,5 @@ ShellRoot {
         }
     }
 
-    Variants {
-        model: Quickshell.screens
-        PowerMenu {
-            modelData: modelData
-            cBg: shellRoot.cBg
-            cFg: shellRoot.cFg
-            cPrimary: shellRoot.cPrimary
-            cMuted: shellRoot.cMuted
-            fontFamily: shellRoot.fontFamily
-            open: shellRoot.powerOpen
-            onRequestClose: shellRoot.powerHide()
-            onPanelEnter: shellRoot.powerEnter()
-            onPanelLeave: shellRoot.powerLeave()
-        }
-    }
 
-    Variants {
-        model: Quickshell.screens
-        Notifications {
-            modelData: modelData
-            notifServer: notifSrv
-            popped: shellRoot.popped
-            expireCallback: (n) => shellRoot.expirePopped(n)
-            cBg: shellRoot.cBg
-            cFg: shellRoot.cFg
-            cPrimary: shellRoot.cPrimary
-            cMuted: shellRoot.cMuted
-            fontFamily: shellRoot.fontFamily
-            open: shellRoot.notifOpen
-            onPanelEnter: shellRoot.notifEnter()
-            onPanelLeave: shellRoot.notifLeave()
-        }
-    }
 }

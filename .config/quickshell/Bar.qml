@@ -22,11 +22,27 @@ PanelWindow {
     required property string batteryText
     required property bool   btConnected
     required property int    notifCount
+    required property bool   notifOpen
+    required property bool   powerOpen
+    required property bool   volumeOpen
+    required property bool   calendarOpen
 
-    signal bellEnter()
-    signal bellLeave()
-    signal powerEnter()
-    signal powerLeave()
+    // Single popout-name signal — Bar fires this when the cursor enters
+    // an icon's hover area; shellRoot dispatches into popoutEnter(name).
+    // popoutLeave fires when the cursor leaves the entire bar.
+    signal popoutEnter(string name)
+    signal popoutLeave()
+
+    // Screen-relative anchor X positions, used by Popouts.qml.
+    // Right-side popouts pin their right edge here:
+    readonly property real volumeRightX:
+        rightSection.x + rightRow.x + volWrap.x + volWrap.width
+    readonly property real bellRightX:
+        rightSection.x + rightRow.x + bellWrap.x + bellWrap.width
+    // Left-side popouts pin their left edge here:
+    readonly property real clockLeftX:
+        leftSection.x + clock.x
+    readonly property real powerLeftX: 0   // power menu hangs from screen left
 
     screen: modelData
 
@@ -52,6 +68,9 @@ PanelWindow {
         width:  bar.cornerSize
         height: bar.cornerSize
         anchors { left: parent.left; top: parent.top; topMargin: bar.barHeight }
+        // layer rendering forces a repaint when fillColor changes — without
+        // this, Shape caches the geometry and only repaints on geometry
+        // changes, leaving the fallback color stuck after cBg updates.
         ShapePath {
             strokeWidth: 0
             fillColor: bar.barColor
@@ -74,7 +93,8 @@ PanelWindow {
         ShapePath {
             strokeWidth: 0
             fillColor: bar.barColor
-            startX: 0; startY: 0
+            startX: 0 + bar.barColor.r * 0
+            startY: 0
             PathLine { x: bar.cornerSize; y: 0 }
             PathLine { x: bar.cornerSize; y: bar.cornerSize }
             PathArc {
@@ -85,11 +105,21 @@ PanelWindow {
         }
     }
 
-    // LEFT — power button + clock + active window title
-    RowLayout {
+    // LEFT — power button + clock + active window title.
+    // Wrapped in a section Item with a HoverHandler so cursor crossing
+    // BETWEEN power and clock keeps the popout open (mirrors right side).
+    Item {
+        id: leftSection
         anchors.left: parent.left
         anchors.verticalCenter: barBg.verticalCenter
         anchors.leftMargin: 14
+        implicitWidth: leftRow.implicitWidth
+        implicitHeight: bar.barHeight
+
+    RowLayout {
+        id: leftRow
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
         spacing: 16
 
         Item {
@@ -100,7 +130,8 @@ PanelWindow {
             TintedIcon {
                 anchors.centerIn: parent
                 name: "system-shutdown-symbolic"
-                tint: powerMa.containsMouse ? bar.cPrimary : bar.cFg
+                tint: (powerMa.containsMouse || bar.powerOpen)
+                    ? bar.cPrimary : bar.cFg
                 size: 20
                 Behavior on tint { ColorAnimation { duration: 120 } }
             }
@@ -108,25 +139,46 @@ PanelWindow {
             MouseArea {
                 id: powerMa
                 anchors.fill: parent
+                anchors.topMargin: -(bar.barHeight - 28) / 2
+                anchors.bottomMargin: -(bar.barHeight - 28) / 2
+                anchors.leftMargin: -8
+                anchors.rightMargin: -8
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onEntered: bar.powerEnter()
-                onExited:  bar.powerLeave()
+                onEntered: bar.popoutEnter("power")
+                onExited:  bar.popoutLeave()
             }
         }
 
         Text {
             id: clock
-            color: bar.cPrimary
+            color: (clockMa.containsMouse || bar.calendarOpen) ? bar.cPrimary : bar.cFg
             font.pixelSize: 16
             font.family: bar.fontFamily
             font.bold: true
+            Behavior on color { ColorAnimation { duration: 120 } }
 
             Timer {
                 interval: 1000
                 running: true; repeat: true; triggeredOnStart: true
                 onTriggered: clock.text =
                     Qt.formatDateTime(new Date(), "HH:mm  ddd dd MMM")
+            }
+
+            // hover area for the clock — extends to full bar height with
+            // small horizontal padding so the cursor doesn't have to land
+            // precisely on the text.
+            MouseArea {
+                id: clockMa
+                anchors.fill: parent
+                anchors.topMargin: -(bar.barHeight - parent.implicitHeight) / 2
+                anchors.bottomMargin: -(bar.barHeight - parent.implicitHeight) / 2
+                anchors.leftMargin: -8
+                anchors.rightMargin: -8
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onEntered: bar.popoutEnter("calendar")
+                onExited:  bar.popoutLeave()
             }
         }
 
@@ -139,6 +191,7 @@ PanelWindow {
             Layout.maximumWidth: 400
         }
     }
+    }   // /leftSection
 
     // CENTER — workspaces with windows + active (Hyprland-driven, not 1..10)
     RowLayout {
@@ -151,75 +204,98 @@ PanelWindow {
             // i.e. ones with windows OR the active one. Always sorted by id.
             model: Hyprland.workspaces.values
 
-            Rectangle {
+            CardButton {
+                id: wsBtn
                 required property var modelData
                 readonly property int wsId: modelData.id
-                readonly property bool active:
-                    Hyprland.focusedWorkspace
+                active: Hyprland.focusedWorkspace
                     && Hyprland.focusedWorkspace.id === wsId
 
-                // active = wide pill, inactive = small dot. animates smoothly.
+                cFg: bar.cFg
+                cPrimary: bar.cPrimary
+                radius: height / 2
                 implicitWidth: active ? 48 : 24
                 implicitHeight: 24
-                radius: height / 2
-                color: active
-                    ? bar.cPrimary
-                    : (ma.containsMouse
-                        ? Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.15)
-                        : Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.05))
 
                 Behavior on implicitWidth {
-                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
                 }
-                Behavior on color {
-                    ColorAnimation { duration: 160 }
-                }
+
+                onClicked: Hyprland.dispatch("workspace " + wsBtn.wsId)
 
                 Text {
                     anchors.centerIn: parent
-                    text: parent.wsId
-                    color: parent.active ? bar.cBg : bar.cFg
-                    opacity: parent.active ? 1 : 0
+                    text: wsBtn.wsId
+                    color: bar.cFg
+                    opacity: wsBtn.active ? 1 : 0.2
                     font.pixelSize: 15
                     font.family: bar.fontFamily
                     font.bold: true
-                    Behavior on opacity { NumberAnimation { duration: 160 } }
-                }
-
-                MouseArea {
-                    id: ma
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: Hyprland.dispatch("workspace " + parent.wsId)
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
             }
         }
     }
 
-    // RIGHT — system modules (volume + bluetooth + battery + notifications)
-    Row {
+    // RIGHT — system modules (volume + bluetooth + battery + notifications).
+    // The whole right Row sits inside a HoverHandler-wrapped Item so the
+    // popout stays open while the cursor crosses BETWEEN icons (volume →
+    // bluetooth → battery → bell). Per-icon MouseAreas only set WHICH
+    // popout to show; the wrapper decides whether to keep it open.
+    Item {
+        id: rightSection
         anchors.right: parent.right
         anchors.verticalCenter: barBg.verticalCenter
         anchors.rightMargin: 14
+        implicitWidth: rightRow.implicitWidth
+        implicitHeight: bar.barHeight
+
+    Row {
+        id: rightRow
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
         spacing: 16
 
-        Row {
-            spacing: 6
-            TintedIcon {
-                name: bar.volumeText === "muted"
-                    ? "audio-volume-muted-symbolic"
-                    : "audio-volume-high-symbolic"
-                tint: bar.cFg
-                size: 20
+        // volume icon + level — hover opens the volume/MPRIS modal.
+        Item {
+            id: volWrap
+            implicitWidth: volRow.implicitWidth
+            implicitHeight: volRow.implicitHeight
+
+            Row {
+                id: volRow
+                spacing: 6
                 anchors.verticalCenter: parent.verticalCenter
+                TintedIcon {
+                    name: bar.volumeText === "muted"
+                        ? "audio-volume-muted-symbolic"
+                        : "audio-volume-high-symbolic"
+                    tint: (volMa.containsMouse || bar.volumeOpen)
+                        ? bar.cPrimary : bar.cFg
+                    size: 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    Behavior on tint { ColorAnimation { duration: 120 } }
+                }
+                Text {
+                    text: bar.volumeText
+                    color: (volMa.containsMouse || bar.volumeOpen)
+                        ? bar.cPrimary : bar.cFg
+                    font.pixelSize: 15
+                    font.family: bar.fontFamily
+                    anchors.verticalCenter: parent.verticalCenter
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
             }
-            Text {
-                text: bar.volumeText
-                color: bar.cFg
-                font.pixelSize: 15
-                font.family: bar.fontFamily
-                anchors.verticalCenter: parent.verticalCenter
+            MouseArea {
+                id: volMa
+                anchors.fill: parent
+                anchors.topMargin: -(bar.barHeight - volRow.implicitHeight) / 2
+                anchors.bottomMargin: -(bar.barHeight - volRow.implicitHeight) / 2
+                anchors.leftMargin: -8
+                anchors.rightMargin: -8
+                hoverEnabled: true
+                onEntered: bar.popoutEnter("volume")
+                onExited:  bar.popoutLeave()
             }
         }
 
@@ -262,8 +338,10 @@ PanelWindow {
                     name: bar.notifCount > 0
                         ? "critical-notif-symbolic"
                         : "low-notif-symbolic"
-                    tint: bar.cFg
+                    tint: (bellMa.containsMouse || bar.notifOpen)
+                        ? bar.cPrimary : bar.cFg
                     size: 20
+                    Behavior on tint { ColorAnimation { duration: 120 } }
                 }
                 Text {
                     visible: bar.notifCount > 0
@@ -274,12 +352,20 @@ PanelWindow {
                     font.bold: true
                 }
             }
+            // Same trick as the power icon — extend the hit-box via
+            // negative margins so the layout stays at content size.
             MouseArea {
+                id: bellMa
                 anchors.fill: parent
+                anchors.topMargin: -(bar.barHeight - bellRow.implicitHeight) / 2
+                anchors.bottomMargin: -(bar.barHeight - bellRow.implicitHeight) / 2
+                anchors.leftMargin: -8
+                anchors.rightMargin: -8
                 hoverEnabled: true
-                onEntered: bar.bellEnter()
-                onExited:  bar.bellLeave()
+                onEntered: bar.popoutEnter("notifications")
+                onExited:  bar.popoutLeave()
             }
         }
+    }
     }
 }
