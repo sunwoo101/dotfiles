@@ -49,4 +49,23 @@ if command -v hyprctl >/dev/null 2>&1; then
     hyprctl setcursor "$CURSOR_THEME" "$CURSOR_SIZE" || true
 fi
 
+# write icon theme into qt5ct/qt6ct configs so Qt apps (incl. Quickshell)
+# resolve icons via QIcon::fromTheme into the active theme
+python3 - "$ICON_THEME" <<'PY'
+import sys, pathlib, configparser
+icon_theme = sys.argv[1]
+for confdir in ("qt5ct", "qt6ct"):
+    path = pathlib.Path.home() / ".config" / confdir / f"{confdir}.conf"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cp = configparser.ConfigParser()
+    cp.optionxform = str  # preserve case
+    if path.exists():
+        cp.read(path)
+    if not cp.has_section("Appearance"):
+        cp.add_section("Appearance")
+    cp.set("Appearance", "icon_theme", icon_theme)
+    with open(path, "w") as f:
+        cp.write(f, space_around_delimiters=False)
+PY
+
 echo "set gsettings cursor=$CURSOR_THEME size=$CURSOR_SIZE, gtk=$GTK_THEME, icon=$ICON_THEME"

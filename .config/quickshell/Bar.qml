@@ -25,6 +25,7 @@ PanelWindow {
 
     signal bellEnter()
     signal bellLeave()
+    signal powerClicked()
 
     screen: modelData
 
@@ -83,12 +84,34 @@ PanelWindow {
         }
     }
 
-    // LEFT — clock + active window title
+    // LEFT — power button + clock + active window title
     RowLayout {
         anchors.left: parent.left
         anchors.verticalCenter: barBg.verticalCenter
         anchors.leftMargin: 14
         spacing: 16
+
+        Item {
+            implicitWidth: 28
+            implicitHeight: 28
+            Layout.alignment: Qt.AlignVCenter
+
+            TintedIcon {
+                anchors.centerIn: parent
+                name: "system-shutdown-symbolic"
+                tint: powerMa.containsMouse ? bar.cPrimary : bar.cFg
+                size: 20
+                Behavior on tint { ColorAnimation { duration: 120 } }
+            }
+
+            MouseArea {
+                id: powerMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: bar.powerClicked()
+            }
+        }
 
         Text {
             id: clock

@@ -62,12 +62,15 @@ ShellRoot {
         return merged;
     }
 
-    property color cBg:      colors ? colors.ui.bg      : "#1e1e2e"
+    property real  cAlpha:   colors ? colors.opacity.bg : 0.7
+    property color cBg: {
+        var c = Qt.color(colors ? colors.ui.bg : "#1e1e2e");
+        return Qt.rgba(c.r, c.g, c.b, cAlpha);
+    }
     property color cFg:      colors ? colors.ui.fg      : "#cdd6f4"
     property color cPrimary: colors ? colors.ui.primary : "#cba6f7"
     property color cAccent:  colors ? colors.ui.accent  : "#f5c2e7"
     property color cMuted:   colors ? colors.ui.muted   : "#6c7086"
-    property real  cAlpha:   colors ? colors.opacity.bg : 0.7
     property string fontFamily: "JetBrainsMono Nerd Font"
 
     // -- theme state + apply pipeline ------------------------------------
@@ -217,6 +220,34 @@ ShellRoot {
         }
     }
 
+    // -- app launcher state + IPC ----------------------------------------
+    // trigger from hyprland: `qs ipc call launcher toggle`
+    property bool launcherOpen: false
+    function launcherShow()   { launcherOpen = true;  }
+    function launcherHide()   { launcherOpen = false; }
+    function launcherToggle() { launcherOpen = !launcherOpen; }
+
+    IpcHandler {
+        target: "launcher"
+        function show()   { shellRoot.launcherShow();   }
+        function hide()   { shellRoot.launcherHide();   }
+        function toggle() { shellRoot.launcherToggle(); }
+    }
+
+    // -- power menu state + IPC ------------------------------------------
+    // toggled via the bar's top-left power button or `qs ipc call power toggle`
+    property bool powerOpen: false
+    function powerShow()   { powerOpen = true;  }
+    function powerHide()   { powerOpen = false; }
+    function powerToggle() { powerOpen = !powerOpen; }
+
+    IpcHandler {
+        target: "power"
+        function show()   { shellRoot.powerShow();   }
+        function hide()   { shellRoot.powerHide();   }
+        function toggle() { shellRoot.powerToggle(); }
+    }
+
     NotificationServer {
         id: notifSrv
         keepOnReload: false
@@ -248,6 +279,7 @@ ShellRoot {
             notifCount: notifSrv.trackedNotifications.values.length
             onBellEnter:  shellRoot.notifEnter()
             onBellLeave:  shellRoot.notifLeave()
+            onPowerClicked: shellRoot.powerToggle()
         }
     }
 
@@ -265,6 +297,34 @@ ShellRoot {
             setAccent: (name, hex) => shellRoot.setAccent(name, hex)
             toggleFlavor: () => shellRoot.toggleFlavor()
             clearOverride: () => shellRoot.clearOverride()
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        AppLauncher {
+            modelData: modelData
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            open: shellRoot.launcherOpen
+            onRequestClose: shellRoot.launcherHide()
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        PowerMenu {
+            modelData: modelData
+            cBg: shellRoot.cBg
+            cFg: shellRoot.cFg
+            cPrimary: shellRoot.cPrimary
+            cMuted: shellRoot.cMuted
+            fontFamily: shellRoot.fontFamily
+            open: shellRoot.powerOpen
+            onRequestClose: shellRoot.powerHide()
         }
     }
 

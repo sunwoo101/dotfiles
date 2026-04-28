@@ -41,3 +41,4 @@ application/x-yaml=neovide.desktop
 
 # pdf — chrome handles them
 application/pdf=google-chrome.desktop
+x-scheme-handler/claude-cli=claude-code-url-handler.desktop

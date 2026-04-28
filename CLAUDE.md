@@ -45,9 +45,12 @@ Multi-file structure. Each PanelWindow lives in its own file; `shell.qml` only h
 
 ```
 .config/quickshell/
-├── shell.qml          # entry point: state (colors, theme, system polling) + Variants
+├── shell.qml          # entry point: state (colors, theme, system polling, IPC) + Variants
 ├── Bar.qml            # top bar PanelWindow (workspaces, clock, title, modules, corners)
 ├── ThemeSwitcher.qml  # bottom hover-reveal panel (accent grid, dark/light, reset)
+├── Notifications.qml  # unified toast + center: pops on new notif, hover expands to all tracked
+├── AppLauncher.qml    # centered drop-down launcher (search + DesktopEntries), opened via IPC
+├── PowerMenu.qml      # left-anchored drop-down with lock/suspend/logout/reboot/shutdown
 └── TintedIcon.qml     # reusable: IconImage from active icon theme + MultiEffect tint
 ```
 
@@ -85,6 +88,15 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
 - Layout sections anchor `verticalCenter: barBg.verticalCenter` (not parent's), so they sit in the bar text area, not the corner overhang.
 - Inverse corners (Caelestia style) drawn with `Shape` + `PathArc`. Same color as bar.
 - System modules (volume/bluetooth/battery) poll via `Process` + `StdioCollector` every 2s. No native Quickshell services used (more reliable across QS versions).
+
+### App launcher (centered, drop-down)
+
+- Hangs from the bar with symmetric inverse top-LEFT/top-RIGHT corners (mirrors the bar's bottom corners) and rounded bottom-LEFT/bottom-RIGHT.
+- Triggered via IPC: `qs ipc call launcher toggle | show | hide` (Hyprland keybinds wired in `keybinds.conf`).
+- IpcHandler lives in `shell.qml` (one global instance); `launcherOpen` state drives the panel via Variants per screen.
+- Search input + ListView of `DesktopEntries.applications.values` (filtered by name/genericName/comment, sorted by name). Up/Down to navigate, Enter to launch, Esc to close.
+- Icons resolved via `Quickshell.iconPath(name)` + `IconImage` (uses current icon theme).
+- `WlrLayershell.keyboardFocus: OnDemand` while open so the search input receives input.
 
 ### Theme switcher (bottom, hover-reveal)
 
