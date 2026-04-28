@@ -15,6 +15,11 @@ override_path = sys.argv[3]
 
 data = json.load(open(os.path.join(base, "colors.json")))
 
+# generated files live in dirs that may not exist yet on a fresh checkout
+# (the dirs contain only gitignored output, so they're not tracked)
+for d in ("ohmyposh", "gtk-3.0", "gtk-4.0", "bashrc"):
+    os.makedirs(os.path.join(base, d), exist_ok=True)
+
 # shallow-merge override on top: override.ui[*] beats base.ui[*], etc.
 if os.path.exists(override_path):
     try:

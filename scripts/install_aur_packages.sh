@@ -21,4 +21,4 @@ if [ "${#PKGS[@]}" -eq 0 ]; then
 fi
 
 echo "installing ${#PKGS[@]} AUR packages"
-yay -S --needed --noconfirm "${PKGS[@]}"
+yes | yay -S --needed "${PKGS[@]}"
