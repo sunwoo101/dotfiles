@@ -54,11 +54,26 @@ PanelWindow {
         readonly property real safeTopRadius:
             Math.min(themeSwitcher.topRadius, panel.height / 2)
 
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: themeSwitcher.open = true
-            onExited:  themeSwitcher.open = false
+        // HoverHandler — keeps tracking hover when the cursor enters child
+        // MouseAreas (accent swatches, toggle, reset). A parent MouseArea would
+        // fire onExited the moment the cursor crossed onto a child.
+        // Close uses a short grace timer to absorb transient leave events
+        // Wayland sends while the surface is resizing during the open
+        // animation — without it the panel fights itself open/closed.
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered) {
+                    closeTimer.stop();
+                    themeSwitcher.open = true;
+                } else {
+                    closeTimer.restart();
+                }
+            }
+        }
+        Timer {
+            id: closeTimer
+            interval: 250
+            onTriggered: themeSwitcher.open = false
         }
 
         // main panel body

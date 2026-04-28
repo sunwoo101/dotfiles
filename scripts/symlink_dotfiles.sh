@@ -7,6 +7,23 @@ USER_CONFIG="$HOME/.config"
 
 mkdir -p "$USER_CONFIG"
 
+# ensure ~/dotfiles points at the repo. Several scripts and the Quickshell
+# config reference ~/dotfiles directly (e.g. shell.qml's apply_palette.py
+# invocation), so the repo must be reachable at that path regardless of
+# where it's actually checked out. If the repo already lives at ~/dotfiles
+# this is a no-op.
+if [ "$DOTFILES" != "$HOME/dotfiles" ]; then
+    if [ -L "$HOME/dotfiles" ]; then
+        rm "$HOME/dotfiles"
+    elif [ -e "$HOME/dotfiles" ]; then
+        echo "warning: $HOME/dotfiles exists and is not a symlink — leaving alone" >&2
+    fi
+    if [ ! -e "$HOME/dotfiles" ]; then
+        ln -s "$DOTFILES" "$HOME/dotfiles"
+        echo "linked $HOME/dotfiles -> $DOTFILES"
+    fi
+fi
+
 # symlink each top-level entry in dotfiles/.config into ~/.config
 for src in "$DOTFILES_CONFIG"/*; do
     [ -e "$src" ] || continue

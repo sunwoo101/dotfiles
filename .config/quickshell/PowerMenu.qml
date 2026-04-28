@@ -22,14 +22,14 @@ PanelWindow {
     required property bool open
 
     signal requestClose()
+    signal panelEnter()
+    signal panelLeave()
 
     screen: modelData
     color: "transparent"
     exclusiveZone: 0
-    visible: implicitHeight > 0
 
     WlrLayershell.layer: WlrLayershell.Top
-    WlrLayershell.keyboardFocus: open ? WlrLayershell.OnDemand : WlrLayershell.None
 
     readonly property int contentWidth:  520
     readonly property int panelHeight:   160
@@ -47,10 +47,6 @@ PanelWindow {
         NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
     }
 
-    onOpenChanged: {
-        if (open) Qt.callLater(() => focusScope.forceActiveFocus());
-    }
-
     Process {
         id: cmd
         running: false
@@ -62,15 +58,23 @@ PanelWindow {
         root.requestClose();
     }
 
-    FocusScope {
-        id: focusScope
+    Item {
+        id: panelOuter
         anchors.fill: parent
-        focus: true
-        Keys.onEscapePressed: root.requestClose()
 
         Item {
             id: panel
             anchors.fill: parent
+            // fade entire panel (shape + buttons) as it shrinks past the
+            // inverse-corner radius — at small heights the carved-out curve
+            // collapses to nothing and the shape would render as a flat
+            // rectangle behind the unrounded button collapse.
+            opacity: Math.min(1, panel.height / (root.invRadius * 2))
+
+            HoverHandler {
+                id: panelHover
+                onHoveredChanged: hovered ? root.panelEnter() : root.panelLeave()
+            }
 
             readonly property real safeBottomRadius:
                 Math.min(root.bottomRadius, panel.height / 2)

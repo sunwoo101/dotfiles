@@ -25,7 +25,8 @@ PanelWindow {
 
     signal bellEnter()
     signal bellLeave()
-    signal powerClicked()
+    signal powerEnter()
+    signal powerLeave()
 
     screen: modelData
 
@@ -109,7 +110,8 @@ PanelWindow {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: bar.powerClicked()
+                onEntered: bar.powerEnter()
+                onExited:  bar.powerLeave()
             }
         }
 

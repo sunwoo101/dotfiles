@@ -28,7 +28,29 @@ ShellRoot {
         path: Quickshell.env("HOME") + "/.cache/quickshell/colors-override.json"
         watchChanges: true
         onFileChanged: reload()
-        onLoaded: shellRoot.overrideContents = text()
+        onLoaded: {
+            shellRoot.overrideContents = text();
+            shellRoot.overrideLoaded = true;
+            shellRoot.maybeHydrate();
+        }
+    }
+
+    // hydrate gating — both the override file must be loaded AND the root
+    // component fully instantiated (so per-screen Bars/panels exist) before
+    // we kick apply_palette. Otherwise the apply chain races component
+    // construction and the bar paints once with stale fallback colors.
+    property bool overrideLoaded: false
+    property bool componentsReady: false
+    property bool hydrated: false
+    function maybeHydrate() {
+        if (hydrated) return;
+        if (!overrideLoaded || !componentsReady) return;
+        hydrated = true;
+        hydrateFromOverride();
+    }
+    Component.onCompleted: {
+        componentsReady = true;
+        maybeHydrate();
     }
 
     Process {
@@ -95,6 +117,28 @@ ShellRoot {
     property string currentAccent:    "mauve"
     property string currentAccentHex: "#cba6f7"
     property string currentFlavor:    "mocha"   // "mocha" | "latte"
+
+    // Rehydrate accent/flavor from the override file once on launch, then
+    // re-run apply_palette.py so generated files (kitty/gtk/ohmyposh/etc.)
+    // and live apps come back into sync with whatever the override says.
+    // Without this, a fresh QS session has correct in-shell colors (FileView
+    // merge) but stale generated files from the previous session.
+    function hydrateFromOverride() {
+        var over = safeParse(overrideContents);
+        // theme.gtk looks like "catppuccin-{flavor}-{accent}-standard+default"
+        var gtk = over && over.theme ? over.theme.gtk : null;
+        if (gtk) {
+            var m = /^catppuccin-(mocha|latte)-([a-z]+)-/.exec(gtk);
+            if (m) {
+                currentFlavor = m[1];
+                currentAccent = m[2];
+            }
+        }
+        if (over && over.ui && over.ui.primary) {
+            currentAccentHex = over.ui.primary;
+        }
+        applyPalette();
+    }
 
     function setAccent(name, hex) {
         currentAccent = name;
@@ -236,11 +280,20 @@ ShellRoot {
     }
 
     // -- power menu state + IPC ------------------------------------------
-    // toggled via the bar's top-left power button or `qs ipc call power toggle`
+    // hover-driven from the bar's top-left power button (mirror of notifs).
+    // Also exposes IPC for `qs ipc call power show|hide|toggle`.
     property bool powerOpen: false
     function powerShow()   { powerOpen = true;  }
     function powerHide()   { powerOpen = false; }
     function powerToggle() { powerOpen = !powerOpen; }
+
+    Timer {
+        id: powerCloseTimer
+        interval: 250
+        onTriggered: shellRoot.powerOpen = false
+    }
+    function powerEnter() { powerCloseTimer.stop(); powerOpen = true; }
+    function powerLeave() { powerCloseTimer.restart(); }
 
     IpcHandler {
         target: "power"
@@ -297,7 +350,8 @@ ShellRoot {
             notifCount: notifSrv.trackedNotifications.values.length
             onBellEnter:  shellRoot.notifEnter()
             onBellLeave:  shellRoot.notifLeave()
-            onPowerClicked: shellRoot.powerToggle()
+            onPowerEnter: shellRoot.powerEnter()
+            onPowerLeave: shellRoot.powerLeave()
         }
     }
 
@@ -343,6 +397,8 @@ ShellRoot {
             fontFamily: shellRoot.fontFamily
             open: shellRoot.powerOpen
             onRequestClose: shellRoot.powerHide()
+            onPanelEnter: shellRoot.powerEnter()
+            onPanelLeave: shellRoot.powerLeave()
         }
     }
 

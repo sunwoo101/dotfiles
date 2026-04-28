@@ -63,6 +63,10 @@ PanelWindow {
     Item {
         id: panel
         anchors.fill: parent
+        // fade entire panel (shape + cards) as it shrinks past the inverse-
+        // corner radius — at small heights the carved-out curve collapses
+        // to nothing and the shape would render as a flat rectangle.
+        opacity: Math.min(1, panel.height / (root.invRadius * 2))
 
         readonly property real safeBottomRadius:
             Math.min(root.bottomRadius, panel.height / 2)
