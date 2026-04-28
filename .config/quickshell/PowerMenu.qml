@@ -127,7 +127,7 @@ PanelWindow {
 
                 Repeater {
                     model: [
-                        { label: "Lock",     icon: "system-lock-screen-symbolic", cmd: ["loginctl", "lock-session"] },
+                        { label: "Lock",     icon: "system-lock-screen-symbolic", cmd: ["qs", "ipc", "call", "lock", "lock"] },
                         { label: "Hibernate", icon: "system-hibernate-symbolic",  cmd: ["systemctl", "hibernate"] },
                         { label: "Logout",   icon: "system-log-out-symbolic",     cmd: ["hyprctl", "dispatch", "exit"] },
                         { label: "Reboot",   icon: "system-reboot-symbolic",      cmd: ["systemctl", "reboot"] },

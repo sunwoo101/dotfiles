@@ -71,6 +71,7 @@ ShellRoot {
     property color cPrimary: colors ? colors.ui.primary : "#cba6f7"
     property color cAccent:  colors ? colors.ui.accent  : "#f5c2e7"
     property color cMuted:   colors ? colors.ui.muted   : "#6c7086"
+    property color cRed:     colors ? colors.ansi.red   : "#f38ba8"
     property string fontFamily: "JetBrainsMono Nerd Font"
 
     // -- theme state + apply pipeline ------------------------------------
@@ -246,6 +247,23 @@ ShellRoot {
         function show()   { shellRoot.powerShow();   }
         function hide()   { shellRoot.powerHide();   }
         function toggle() { shellRoot.powerToggle(); }
+    }
+
+    // -- session lock + IPC ----------------------------------------------
+    // trigger: `qs ipc call lock lock` (or PowerMenu's Lock button)
+    Lock {
+        id: lockObj
+        cBg: shellRoot.colors ? shellRoot.colors.ui.bg : "#1e1e2e"  // opaque bg on the lock surface
+        cFg: shellRoot.cFg
+        cPrimary: shellRoot.cPrimary
+        cMuted: shellRoot.cMuted
+        cRed: shellRoot.cRed
+        fontFamily: shellRoot.fontFamily
+    }
+
+    IpcHandler {
+        target: "lock"
+        function lock() { lockObj.lock(); }
     }
 
     NotificationServer {

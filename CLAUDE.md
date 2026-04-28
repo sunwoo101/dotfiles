@@ -50,7 +50,8 @@ Multi-file structure. Each PanelWindow lives in its own file; `shell.qml` only h
 ├── ThemeSwitcher.qml  # bottom hover-reveal panel (accent grid, dark/light, reset)
 ├── Notifications.qml  # unified toast + center: pops on new notif, hover expands to all tracked
 ├── AppLauncher.qml    # centered drop-down launcher (search + DesktopEntries), opened via IPC
-├── PowerMenu.qml      # left-anchored drop-down with lock/suspend/logout/reboot/shutdown
+├── PowerMenu.qml      # left-anchored drop-down with lock/hibernate/logout/reboot/shutdown
+├── Lock.qml           # WlSessionLock screen with PamContext auth (config: "login")
 └── TintedIcon.qml     # reusable: IconImage from active icon theme + MultiEffect tint
 ```
 
