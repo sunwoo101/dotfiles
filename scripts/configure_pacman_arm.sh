@@ -44,10 +44,19 @@ set -euo pipefail
 # Extracts hyprland.desktop from the pacman package cache into
 # /usr/local/share/wayland-sessions/ — uwsm searches all XDG_DATA_DIRS/wayland-sessions/
 # so it finds the file there, but SDDM's SessionDir only covers /usr/share/wayland-sessions/.
-pkg=$(find /var/cache/pacman/pkg -name 'hyprland-[0-9]*.pkg.tar.!(sig)' | sort -V | tail -1)
+find_pkg() {
+    find /var/cache/pacman/pkg -name 'hyprland-[0-9]*.pkg.tar.*' -not -name '*.sig' \
+        | sort -V | tail -1
+}
+pkg=$(find_pkg)
 if [ -z "$pkg" ]; then
-    echo "WARNING: hyprland package not in pacman cache — /usr/local/share/wayland-sessions/hyprland.desktop not updated" >&2
-    exit 0
+    echo "hyprland not in pacman cache, downloading..."
+    pacman -Sw --noconfirm hyprland
+    pkg=$(find_pkg)
+fi
+if [ -z "$pkg" ]; then
+    echo "ERROR: could not find or download hyprland package" >&2
+    exit 1
 fi
 mkdir -p /usr/local/share/wayland-sessions
 tmp=$(mktemp)
