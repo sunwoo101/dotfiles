@@ -5,15 +5,19 @@ DOTFILES="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
 LIST="$DOTFILES/packages/pacman"
 
 if [ ! -f "$LIST" ]; then
-    echo "no pacman list at $LIST"
-    exit 0
+    echo "ERROR: pacman list missing at $LIST" >&2
+    exit 1
 fi
 
 mapfile -t PKGS < <(sed -n 's/^- //p' "$LIST")
 if [ "${#PKGS[@]}" -eq 0 ]; then
-    echo "no packages in $LIST"
-    exit 0
+    echo "ERROR: pacman list at $LIST is empty" >&2
+    exit 1
 fi
 
-echo "installing ${#PKGS[@]} pacman packages (full sync+upgrade to avoid partial-upgrade conflicts)"
-yes | sudo pacman -Syu --needed "${PKGS[@]}"
+# Full sync+upgrade with the package list. --noconfirm answers all prompts
+# with the default. --overwrite "*" lets a package take over a file that
+# was previously installed by something else (rare but blocks unattended
+# installs when it happens, e.g. theme overlap).
+echo "installing ${#PKGS[@]} pacman packages"
+sudo pacman -Syu --needed --noconfirm --overwrite "*" "${PKGS[@]}"

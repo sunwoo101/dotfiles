@@ -8,10 +8,20 @@ if ! command -v gsettings >/dev/null 2>&1; then
     exit 0
 fi
 
+# Apply a single gsettings key. Logs a warning if the key is missing
+# (e.g. running on a system without GNOME) but does NOT fail — gsettings
+# returning "No such schema" shouldn't abort the install.
+gset() {
+    if ! gsettings set "$1" "$2" "$3" 2>/tmp/gset-err; then
+        echo "warning: gsettings set $1 $2 failed: $(cat /tmp/gset-err)" >&2
+    fi
+    rm -f /tmp/gset-err
+}
+
 # read theme block from colors.json + override file (override wins)
 read -r GTK_THEME ICON_THEME CURSOR_THEME CURSOR_SIZE <<<"$(
 python3 - "$DOTFILES" <<'PY'
-import json, os, pathlib, sys
+import json, pathlib, sys
 base = json.load(open(sys.argv[1] + "/.config/colors.json"))
 override = pathlib.Path.home() / ".cache" / "quickshell" / "colors-override.json"
 if override.exists():
@@ -31,22 +41,25 @@ print(t["gtk"], t["icon"], t["cursor"], t["cursor_size"])
 PY
 )"
 
-# derive dark vs light from theme name (catppuccin-mocha-* / Catppuccin-Mauve-Dark = dark; latte / -Light = light)
+# derive dark vs light from theme name
 if echo "$GTK_THEME" | grep -qiE "latte|-light"; then
     SCHEME="prefer-light"
 else
     SCHEME="prefer-dark"
 fi
-gsettings set org.gnome.desktop.interface color-scheme "$SCHEME" || true
-gsettings set org.gnome.desktop.interface gtk-theme "$GTK_THEME" || true
-gsettings set org.gnome.desktop.interface icon-theme "$ICON_THEME" || true
-gsettings set org.gnome.desktop.interface cursor-theme "$CURSOR_THEME" || true
-gsettings set org.gnome.desktop.interface cursor-size "$CURSOR_SIZE" || true
-gsettings set org.gnome.desktop.wm.preferences button-layout ':' || true
+gset org.gnome.desktop.interface color-scheme  "$SCHEME"
+gset org.gnome.desktop.interface gtk-theme      "$GTK_THEME"
+gset org.gnome.desktop.interface icon-theme     "$ICON_THEME"
+gset org.gnome.desktop.interface cursor-theme   "$CURSOR_THEME"
+gset org.gnome.desktop.interface cursor-size    "$CURSOR_SIZE"
+gset org.gnome.desktop.wm.preferences button-layout ':'
 
 # also tell hyprland (so the cursor in the compositor matches GTK apps)
 if command -v hyprctl >/dev/null 2>&1; then
-    hyprctl setcursor "$CURSOR_THEME" "$CURSOR_SIZE" || true
+    if ! hyprctl setcursor "$CURSOR_THEME" "$CURSOR_SIZE" 2>/tmp/hyprctl-err; then
+        echo "warning: hyprctl setcursor failed (Hyprland not running?): $(cat /tmp/hyprctl-err)" >&2
+    fi
+    rm -f /tmp/hyprctl-err
 fi
 
 # write icon theme into qt5ct/qt6ct configs so Qt apps (incl. Quickshell)
