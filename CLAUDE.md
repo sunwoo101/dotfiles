@@ -395,10 +395,13 @@ dotfiles/
 ├── CLAUDE.md                   # this file
 ├── packages/{pacman,aur}       # `- pkgname` per line
 ├── scripts/                    # one concern each, independently runnable
+│   ├── configure_pacman.sh      # pacman.conf edits: enable [multilib],
+│   │                            #   NoExtract the non-UWSM Hyprland
+│   │                            #   session file
 │   ├── install_pacman_packages.sh
 │   ├── install_yay.sh
-│   ├── install_aur_packages.sh
-│   ├── install_gpu_drivers.sh   # interactive picker
+│   ├── install_aur_packages.sh  # --skippgpcheck so AUR keys don't prompt
+│   ├── install_gpu_drivers.sh   # interactive picker (only user input)
 │   ├── install_colloid_icons.sh # git clone + ./install.sh -b
 │   ├── enable_services.sh       # sddm, NM, bluetooth, hyprpolkitagent (user)
 │   ├── render_configs.sh        # colors.json + override → generated configs
