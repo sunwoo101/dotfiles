@@ -9,16 +9,13 @@ set -euo pipefail
 CONF=/etc/pacman.conf
 
 # Migrate: remove stale NoExtract directive if a prior run added it.
-if grep -Fxq 'NoExtract = usr/share/wayland-sessions/hyprland.desktop' "$CONF"; then
-    echo "removing stale NoExtract for hyprland.desktop from $CONF"
-    sudo sed -i '/^NoExtract = usr\/share\/wayland-sessions\/hyprland\.desktop$/d' "$CONF"
-fi
+sudo sed -i '\|^NoExtract = usr/share/wayland-sessions/hyprland\.desktop$|d' "$CONF"
 
 # Restore the file if a prior run deleted it.
 TARGET=/usr/share/wayland-sessions/hyprland.desktop
 if [ ! -e "$TARGET" ]; then
     echo "restoring missing $TARGET (reinstalling hyprland)"
-    sudo pacman -S --needed --noconfirm --overwrite "*" hyprland
+    sudo pacman -S --noconfirm --overwrite "*" hyprland
 fi
 
 # Install pacman hook so Hidden=true is reapplied after future upgrades.
