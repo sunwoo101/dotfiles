@@ -9,7 +9,7 @@ set -euo pipefail
 CONF=/etc/pacman.conf
 
 # Migrate: remove stale NoExtract directive if a prior run added it.
-sudo sed -i '\|^NoExtract = usr/share/wayland-sessions/hyprland\.desktop$|d' "$CONF"
+sudo sed -i '/^NoExtract.*hyprland\.desktop/d' "$CONF"
 
 # Restore the file if a prior run deleted it.
 TARGET=/usr/share/wayland-sessions/hyprland.desktop
