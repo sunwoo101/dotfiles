@@ -395,9 +395,10 @@ dotfiles/
 ├── CLAUDE.md                   # this file
 ├── packages/{pacman,aur}       # `- pkgname` per line
 ├── scripts/                    # one concern each, independently runnable
-│   ├── configure_pacman.sh      # pacman.conf edits: enable [multilib],
-│   │                            #   pacman hook to patch Hidden=true into
-│   │                            #   hyprland.desktop (kept on disk for uwsm)
+│   ├── configure_pacman.sh      # pacman.conf edits: enable [multilib];
+│   │                            #   NoExtract + pacman hook moves
+│   │                            #   hyprland.desktop → applications/ so
+│   │                            #   uwsm finds it but SDDM doesn't list it
 │   ├── install_pacman_packages.sh
 │   ├── install_yay.sh
 │   ├── install_aur_packages.sh  # --skippgpcheck so AUR keys don't prompt
