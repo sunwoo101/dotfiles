@@ -306,8 +306,16 @@ dotfiles/
 
 - Layout: **dwindle with `smart_split = true`** — cursor-position determines split direction. Avoids aspect-ratio surprises on near-square monitors.
 - `gaps_out = 8`, `rounding = 8` — paired with bar's `cornerSize = 16`.
-- Autostart: `nm-applet --indicator`, `livepaper --restore`, `qs`.
-- Session: **uwsm**.
+- Autostart: `nm-applet --indicator`, `blueman-applet`, `livepaper --restore`, `qs`.
+- Session: **uwsm** (via `hyprland-uwsm.desktop`, which calls `uwsm start -e`). `uwsm finalize` is unreliable here — `-e` mode skips the wayland-wm service unit, so finalize can't attach and `graphical-session.target` never activates on its own. `autostart.conf` works around this with `systemctl --user import-environment ...` + `dbus-update-activation-environment --systemd ...` to propagate Wayland env into the user systemd / dbus-activation environments so D-Bus-activated services (portals, future user services) get a working session.
+- **`uwsm app -- <cmd>` for every long-running autostart.** Wraps the process in a transient `app-*.scope` unit under `graphical-session.target`, so:
+  - it gets restarted-on-crash semantics if you add a drop-in (plain `exec-once` does NOT — Hyprland fires it once and forgets),
+  - it dies cleanly on logout (no orphaned daemons holding Wayland fds — see the xdg-desktop-portal SEGV note below),
+  - logs go to the journal under a predictable unit name (`journalctl --user -u 'app-*special-workspace-guard*'`),
+  - and it inherits the imported Wayland/DBus env from the systemd user manager, not just Hyprland's child env.
+  Use it for: GUI apps (qs, nm-applet, blueman-applet), background daemons (livepaper, special-workspace-guard.sh), anything you'd otherwise want to `pkill` and restart manually. Do NOT wrap one-shot setup commands (`systemctl --user import-environment`, `hyprctl dispatch workspace 1`, `dbus-update-activation-environment`) — they exit immediately and the scope unit churn is wasted.
+- No assumption about docker / per-user services — those are user-level concerns. If you want docker-desktop to start, `systemctl --user enable docker-desktop.service` plus a personal exec-once is the right path; dotfiles stays portable.
+- `xdg-desktop-portal-hyprland.service` SEGVs on logout (its `atexit` cleanup writes to a Wayland connection Hyprland already tore down). Cosmetic — fresh portal spawns next session. `drkonqi` is in `packages/pacman` so the resulting coredump notification surfaces through the bar's notification daemon and is click-through-able for a backtrace; don't suppress it via `LimitCORE=0` drop-ins, that breaks the click-through.
 
 ## SDDM greeter (`sddm-theme/dotfiles/`)
 

@@ -46,7 +46,9 @@ Item {
         spacing: root.spacing
 
         Repeater {
-            model: Hyprland.workspaces.values
+            // Special workspaces (negative ids) hold per-app tray windows
+            // and shouldn't appear in the overview alongside normal ones.
+            model: Hyprland.workspaces.values.filter(w => w.id >= 0)
 
             Rectangle {
                 id: wsCard

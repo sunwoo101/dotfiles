@@ -1,4 +1,6 @@
 - hyprland
+- dex
+- drkonqi
 - xdg-desktop-portal
 - xdg-desktop-portal-hyprland
 - xdg-desktop-portal-gtk
@@ -32,6 +34,7 @@
 - grim
 - slurp
 - network-manager-applet
+- blueman-applet
 - pavucontrol
 - gnome-themes-extra
 - mesa

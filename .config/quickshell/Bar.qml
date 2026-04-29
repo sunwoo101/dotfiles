@@ -307,7 +307,9 @@ PanelWindow {
                     Repeater {
                         // Hyprland.workspaces.values is the list of workspaces
                         // that exist — i.e. ones with windows OR the active one.
-                        model: Hyprland.workspaces.values
+                        // Special workspaces have negative ids; filter them
+                        // out so the pills only show normal numbered ones.
+                        model: Hyprland.workspaces.values.filter(w => w.id >= 0)
 
                         Rectangle {
                             id: wsPill
