@@ -396,8 +396,8 @@ dotfiles/
 ├── packages/{pacman,aur}       # `- pkgname` per line
 ├── scripts/                    # one concern each, independently runnable
 │   ├── configure_pacman.sh      # pacman.conf edits: enable [multilib],
-│   │                            #   NoExtract the non-UWSM Hyprland
-│   │                            #   session file
+│   │                            #   pacman hook to patch Hidden=true into
+│   │                            #   hyprland.desktop (kept on disk for uwsm)
 │   ├── install_pacman_packages.sh
 │   ├── install_yay.sh
 │   ├── install_aur_packages.sh  # --skippgpcheck so AUR keys don't prompt

@@ -3,10 +3,10 @@ set -euo pipefail
 
 # Apply our pacman.conf customizations:
 #   1. Enable [multilib] (lib32-* packages: mesa, vulkan, nvidia, etc.)
-#   2. NoExtract paths we don't want pacman to install — currently the
-#      non-UWSM Hyprland session file, since SDDM lists both
-#      "Hyprland" and "Hyprland (UWSM-managed)" otherwise and we only
-#      want the UWSM one.
+#   2. Install a pacman hook that patches Hidden=true into hyprland.desktop
+#      after install/upgrade so SDDM only shows the UWSM-managed entry.
+#      The file is kept on disk — uwsm references it as the compositor
+#      entry when launching the session via hyprland-uwsm.desktop.
 
 CONF=/etc/pacman.conf
 
@@ -39,34 +39,45 @@ if [ "$MULTILIB_ALREADY" -eq 0 ]; then
     echo "[multilib] enabled"
 fi
 
-# ---- NoExtract: hide the non-UWSM Hyprland session ----------------------
-# SDDM scans /usr/share/wayland-sessions/*.desktop. The hyprland package
-# installs hyprland.desktop and the uwsm package installs
-# hyprland-uwsm.desktop. We only want the UWSM-managed entry, so
-# prevent pacman from extracting the plain one on this and future
-# upgrades. NoExtract uses path patterns; the leading slash is omitted
-# per pacman.conf syntax.
-NOEXTRACT='NoExtract = usr/share/wayland-sessions/hyprland.desktop'
-if grep -Fxq "$NOEXTRACT" "$CONF"; then
-    echo "NoExtract for hyprland.desktop already present"
-else
-    echo "adding NoExtract for hyprland.desktop to $CONF"
-    # Insert immediately after the [options] header so it lands inside
-    # the [options] section regardless of which other directives are
-    # there.
-    sudo sed -i "/^\[options\]/a $NOEXTRACT" "$CONF"
-    if ! grep -Fxq "$NOEXTRACT" "$CONF"; then
-        echo "ERROR: failed to add NoExtract directive — check $CONF manually" >&2
-        exit 1
-    fi
+# ---- hide plain Hyprland session from SDDM via pacman hook ---------------
+# Migrate: remove stale NoExtract directive if a prior run added it.
+if grep -Fxq 'NoExtract = usr/share/wayland-sessions/hyprland.desktop' "$CONF"; then
+    echo "removing stale NoExtract for hyprland.desktop from $CONF"
+    sudo sed -i '/^NoExtract = usr\/share\/wayland-sessions\/hyprland\.desktop$/d' "$CONF"
 fi
 
-# NoExtract only affects future extractions. If hyprland is already
-# installed, the file is still present — remove it now so the change
-# takes effect immediately. (Re-installing or upgrading the hyprland
-# package will not recreate it because of the directive above.)
+# Restore the file if a prior run deleted it.
 TARGET=/usr/share/wayland-sessions/hyprland.desktop
-if [ -e "$TARGET" ]; then
-    echo "removing existing $TARGET"
-    sudo rm "$TARGET"
+if [ ! -e "$TARGET" ]; then
+    echo "restoring missing $TARGET (reinstalling hyprland)"
+    sudo pacman -S --needed --noconfirm --overwrite "*" hyprland
+fi
+
+# Install pacman hook so Hidden=true is reapplied after future upgrades.
+HOOK_DIR=/etc/pacman.d/hooks
+HOOK="$HOOK_DIR/hide-hyprland-session.hook"
+sudo mkdir -p "$HOOK_DIR"
+if [ ! -f "$HOOK" ]; then
+    echo "installing pacman hook: $HOOK"
+    sudo tee "$HOOK" >/dev/null <<'HOOK'
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/share/wayland-sessions/hyprland.desktop
+
+[Action]
+Description = Hiding plain Hyprland session from SDDM (use Hyprland UWSM instead)...
+When = PostTransaction
+Exec = /bin/sh -c "grep -q '^Hidden=true' /usr/share/wayland-sessions/hyprland.desktop 2>/dev/null || sed -i '/^\[Desktop Entry\]/a Hidden=true' /usr/share/wayland-sessions/hyprland.desktop"
+HOOK
+    echo "hook installed"
+else
+    echo "pacman hook already present"
+fi
+
+# Apply now — the hook only fires on future installs/upgrades.
+if ! grep -q '^Hidden=true' "$TARGET" 2>/dev/null; then
+    echo "patching $TARGET: adding Hidden=true"
+    sudo sed -i '/^\[Desktop Entry\]/a Hidden=true' "$TARGET"
 fi
