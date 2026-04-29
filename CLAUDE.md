@@ -2,388 +2,270 @@
 
 Hyprland + Quickshell on Arch. Catppuccin Mocha base. Single source of truth for colors with live reload across kitty, hyprland, oh-my-posh, GTK, and the bar.
 
-## Keeping this file current (instructions to Claude)
+## Keeping this file current
 
-**This file is a contract.** Whenever you make a non-trivial change to the project — new component, new architectural pattern, a fix that depends on a non-obvious invariant, a new generated file, a new IPC handler, a Hyprland keybind change, an animation tier, a discovered Qt/Wayland gotcha — update CLAUDE.md in the same change so it stays in sync with the code. You don't need to be asked.
+This file is a contract. When you make a non-trivial change (new component, new invariant, new generated file, new IPC, new keybind, new animation tier, discovered Wayland gotcha), update CLAUDE.md in the same change.
 
-Update rules:
-- Add brief, declarative entries (a sentence or two) to the relevant section. Don't dump narrative.
-- If a fix depends on a non-obvious invariant ("this Loader must have `enabled: false` AND `z: 0`"), document the invariant AND a one-line "why" so the next agent doesn't undo it. Real-world consequence is great context.
-- If you delete code or remove a file, delete its mention here too.
-- File-tree diagrams, generated-file tables, and animation-tier tables must mirror reality. Update them when files are added/removed/renamed.
-- New `.qml` files, new modal/popout patterns, new shell scripts → add to the relevant inventory section.
-
-Don't add CLAUDE.md updates as a separate commit — fold them into the same change as the code.
+- Brief declarative entries, not narrative.
+- Document non-obvious invariants AND a one-line "why" so the next agent doesn't undo them.
+- Remove deleted code's mention. Keep file trees, generated-file tables, and animation tiers in sync with reality.
 
 ## Source of truth
 
-- **`.config/colors.json`** — base palette (`ansi`, `ui`, `opacity`, `theme.{gtk,cursor,icon,gtk2_fallback}`).
-- **`~/.cache/quickshell/colors-override.json`** — runtime override, gitignored, outside the repo. Settings UI / accent picker writes here, not to `colors.json`.
-- Final colors = base shallow-merged with override (top-level sections like `ui`, `theme` merge per-key).
+- `.config/colors.json` — base palette (`ansi`, `ui`, `opacity`, `theme.{gtk,cursor,icon,gtk2_fallback}`).
+- `~/.cache/quickshell/colors-override.json` — runtime override, gitignored, outside the repo. Settings UI / accent picker writes here.
+- Final = base shallow-merged with override (top-level sections like `ui`, `theme` merge per-key).
 
-Repo stays clean during interactive theme tweaking. To make an override permanent, copy values from override into `colors.json`.
+## Generated files (gitignored)
 
-## Generated files (gitignored, do not edit by hand)
+All written by `render_configs.sh` from `colors.json` + override:
 
-| Path | Generator |
+| Path | Notes |
 |---|---|
-| `.config/colors.conf` | render_configs.sh (kitty include) |
-| `.config/bashrc/colors` | render_configs.sh (`export PRIMARY=...`) |
-| `.config/gtk-{3,4}.0/{gtk.css,settings.ini}` | render_configs.sh |
-| `.config/ohmyposh/theme.omp.json` | render_configs.sh (palette injected into `templates/ohmyposh.omp.json`) |
-| `.config/hypr/conf/colors.conf` | render_configs.sh (`$ACCENT`, `$PRIMARY`, etc. — sourced from `visuals.conf`) |
-| `home/.gtkrc-2.0` | render_configs.sh |
+| `.config/colors.conf` | kitty include |
+| `.config/bashrc/colors` | `export PRIMARY=...` |
+| `.config/gtk-{3,4}.0/{gtk.css,settings.ini}` | |
+| `.config/ohmyposh/theme.omp.json` | palette injected into `templates/ohmyposh.omp.json` |
+| `.config/hypr/conf/colors.conf` | `$ACCENT`, `$PRIMARY`, etc.; sourced from `visuals.conf` |
+| `home/.gtkrc-2.0` | |
+| `sddm-theme/dotfiles/theme.conf` | read by greeter as `config.<key>` |
 
-Hand-edited: `kitty.conf`, `hypr/conf/*`, `bashrc/{aliases,ohmyposh,env}`, `templates/*`, `quickshell/shell.qml`.
+Hand-edited: `kitty.conf`, `hypr/conf/*`, `bashrc/{aliases,ohmyposh,env}`, `templates/*`, `quickshell/*`.
 
 ## Live reload pipeline
 
-After any colors change, run in order:
+Order: `render_configs.sh` → `apply_gsettings.sh` → `reload_all.sh`. The Quickshell `applyChain` Process runs all three.
 
-```
-render_configs.sh   # write generated files (merged base + override)
-apply_gsettings.sh  # gsettings + hyprctl setcursor (also reads merged)
-reload_all.sh       # IPC pushes to running apps
-```
-
-The Quickshell `applyChain` Process runs all three. What each app needs:
-
-- **kitty** — `kitty @ --to=unix:@mykitty-{PID} set-colors --all --configured ~/.config/colors.conf`. Requires `allow_remote_control yes` + `listen_on unix:@mykitty` in kitty.conf. **Kitty appends `-{PID}` to abstract socket names** — iterate every kitty PID.
+- **kitty** — `kitty @ --to=unix:@mykitty-{PID} set-colors --all --configured ~/.config/colors.conf`. Requires `allow_remote_control yes` + `listen_on unix:@mykitty`. Kitty appends `-{PID}` to abstract socket names — iterate every kitty PID.
 - **hyprland** — `hyprctl reload`.
-- **bash / oh-my-posh** — bash embeds the prompt at init. `bashrc/ohmyposh` installs a `SIGUSR1` trap that re-runs `oh-my-posh init`. `reload_all.sh` does `pkill -USR1 -x bash`.
-- **GTK apps** — **no live reload exists**. Apps cache theme at startup. gsettings notifications reach libadwaita apps but not custom CSS. Restart the app.
+- **bash / oh-my-posh** — `bashrc/ohmyposh` traps `SIGUSR1` to re-run `oh-my-posh init`. `reload_all.sh` does `pkill -USR1 -x bash`.
+- **GTK** — no live reload exists; restart the app. gsettings notifications reach libadwaita but not custom CSS.
 
 ## Quickshell (`.config/quickshell/`)
 
-Multi-file structure. `shell.qml` holds shared state; per-screen panels live in their own files and are instantiated via `Variants`. **All top-bar drop-down popouts (volume, notifications, calendar, power) share one Popouts wrapper window** that morphs between contents — same window, animated `panel.x`/`width`/`height`, fading content. AppLauncher and ThemeSwitcher have their own positioning needs and stay as standalone `Modal` instances.
+`shell.qml` holds shared state; per-screen panels are instantiated via `Variants`. **All bar drop-down popouts (volume, notifications, calendar, power, tray, workspaces) share one Popouts wrapper window per side per screen** that morphs between contents (animated `panel.x`/`width`/`height`, fading content). AppLauncher and ThemeSwitcher are standalone `Modal` instances.
 
 ```
-.config/quickshell/
-├── shell.qml                   # entry point: state (colors, theme, popout, system) + Variants
-├── Bar.qml                     # top bar PanelWindow (workspaces, clock, modules, corners).
-│                               #   Exposes anchor X for each popout trigger:
-│                               #     volumeRightX, bellRightX (right-side popouts)
-│                               #     clockLeftX, powerLeftX  (left-side popouts)
-├── Modal.qml                   # base PanelWindow for single-content standalone modals
-│                               #   (AppLauncher, ThemeSwitcher). Derives corner config
-│                               #   from edge+align, animates implicitWidth + implicitHeight
-│                               #   at 280ms OutCubic (matches Popouts feel).
-├── Popouts.qml                 # ONE PanelWindow per screen hosting all 4 bar popouts. Each
-│                               #   has anchorSide ("left"|"right") + anchor X. Loaders stay
-│                               #   active so morph starts instantly. SVG path adapts:
-│                               #   inverse top corners + rounded bottom on sides not at a
-│                               #   screen edge; flush at screen edges.
-├── VolumeContent.qml           # MPRIS card + sink slider
-├── NotificationsContent.qml    # popup + center, grouped by appName with click-to-expand
-│                               #   per-group chevron + per-notif age (e.g. "5m")
-├── CalendarContent.qml         # month grid, prev/next nav, today highlighted
-├── PowerMenuContent.qml        # lock/hibernate/logout/reboot/shutdown
-├── TrayMenuContent.qml         # SystemTrayItem menu rendered inline (via QsMenuOpener)
-│                               #   so tray menus get the same hover/morph as volume etc.
-├── AppLauncher.qml             # centered top-anchored Modal (closeOnOutsideClick)
-├── ThemeSwitcher.qml           # bottom centered Modal — accent grid, dark/light, reset
-├── EdgeBumper.qml              # reusable invisible hover trigger anchored to a screen
-│                               #   edge; bleeds 1 px past the edge to dodge Wayland's
-│                               #   pointer-leave at screen-edge row. Pair with any
-│                               #   non-bar Modal via shellRoot._bumperHover registry.
-├── WorkspacesContent.qml       # thumbnail grid for the workspaces overview popout
-├── Lock.qml                    # WlSessionLock screen with PamContext auth
-├── CardButton.qml              # reusable button surface (subtle fill + cPrimary border)
-└── TintedIcon.qml              # symbolic SVG via Quickshell.iconPath, recolored by MultiEffect
+shell.qml                # state (colors, theme, popout, system) + Variants
+Bar.qml                  # top bar; exposes anchor X for each popout trigger
+Modal.qml                # base PanelWindow for standalone modals
+Popouts.qml              # wrapper hosting all bar popouts; SVG path adapts to edge state
+{Volume,Notifications,Calendar,PowerMenu,Tray,Workspaces}Content.qml
+AppLauncher.qml          # centered top-anchored Modal (closeOnOutsideClick)
+ThemeSwitcher.qml        # bottom centered Modal — accent grid, dark/light, reset
+EdgeBumper.qml           # invisible hover trigger anchored to a screen edge
+Lock.qml                 # WlSessionLock screen with PamContext auth
+CardButton.qml           # reusable button surface
+TintedIcon.qml           # symbolic SVG via Quickshell.iconPath, recolored by MultiEffect
 ```
 
-**State stays in `shell.qml`** — colors loading (FileView × 2), `cBg`/`cFg`/`cPrimary`/etc., theme state (`currentAccent`, `currentFlavor`), action functions (`setAccent`, `toggleFlavor`, `clearOverride`), system polling (`volumeText`, `batteryText`, `btConnected`). Children declare `required property` for what they need; `shell.qml` passes them via the Variants delegate.
+**State stays in shell.qml.** Children declare `required property` for what they need; `shell.qml` passes via the Variants delegate. Action callbacks are arrow-wrapped (`setAccent: (n,h) => shellRoot.setAccent(n,h)`) so `this` doesn't get lost.
 
-**Per-screen ownership for popouts/launcher.** Every modal-style PanelWindow is instantiated per-monitor via `Variants`. Without scoping, hover/IPC state opens on every monitor at once. Each Variants block filters on an *owner screen name*:
-- **Popouts**: `current: shellRoot.popoutOwner === modelData.name ? shellRoot.popoutCurrent : ""`. `popoutOwner` is set on `popoutEnter(name, screen)` (bar passes `modelData.name`) or `popoutShow(name)` (IPC; uses `focusedScreen`). For auto-popped notifications, owner falls back to `focusedScreen`.
-- **AppLauncher**: `open: launcherOpen && launcherOwner === modelData.name`. `launcherOwner` is captured from `focusedScreen` on `launcherShow()`.
-- **ThemeSwitcher**: each screen has its own EdgeBumper, so hover is naturally local — no owner gating needed.
+**Per-screen ownership.** Every modal-style PanelWindow is instantiated per-monitor via `Variants`. Without scoping, hover/IPC state opens on every monitor at once. Each variant filters on an *owner screen name*:
+- Popouts: `current: popoutOwner === modelData.name ? popoutCurrent : ""`. `popoutOwner` is set on `popoutEnter(name, screen)` (bar passes `modelData.name`) or `popoutShow(name)` (IPC; uses `focusedScreen`).
+- AppLauncher: `open: launcherOpen && launcherOwner === modelData.name`. Owner captured from `focusedScreen` on `launcherShow()`.
+- ThemeSwitcher: each screen has its own EdgeBumper, so hover is naturally local.
 
-`focusedScreen` is `Hyprland.focusedWorkspace.monitor.name`. Bars on every monitor remain visible and trigger their own monitor's popouts; IPC and notifications open on the focused one only.
+`focusedScreen` is `Hyprland.focusedWorkspace.monitor.name`.
 
-**Action callbacks** are passed as arrow-wrapped function properties:
+### Adding a new bar popout
 
-```qml
-ThemeSwitcher {
-    setAccent: (name, hex) => shellRoot.setAccent(name, hex)
-}
-```
+1. Write `FooContent.qml` — plain `Item` with `implicitWidth`/`implicitHeight`. No `PanelWindow`.
+2. In `Popouts.qml`: add a `Loader { active: true; opacity: current === "foo" ? 1 : 0 }`. Extend `_config(name)` with `{ side, anchor, item }`.
+3. In `Bar.qml`: expose `fooLeftX` / `fooRightX` for the trigger anchor. `MouseArea.onEntered: bar.popoutEnter("foo")`. The wrapper `HoverHandler` already handles leave.
+4. In `shell.qml`: route the new anchor through `_setBarAnchor` / `_barAnchors`.
 
-The arrow wrapping captures `shellRoot` so `this` doesn't get lost.
-
-**Adding a new bar popout** (any of the 4 quadrants of the bar):
-
-1. Write `FooContent.qml` — an `Item` with `implicitWidth` / `implicitHeight` declared. No `PanelWindow`.
-2. In `Popouts.qml`:
-   - Add a `Loader { id: fooLoader }` next to the existing ones inside `contentArea` (anchor `right` for right-side popouts, `left` for left-side; `active: true; opacity: current === "foo" ? 1 : 0`).
-   - Extend `_config(name)` with a `{ side, anchor, item }` entry.
-3. In `Bar.qml`: expose `fooLeftX` (or `fooRightX`) for the trigger icon's anchor. Add a `MouseArea` that calls `bar.popoutEnter("foo")` `onEntered`. The wrapper `HoverHandler` on `leftSection`/`rightSection` already handles leave.
-4. In `shell.qml`: add `Foo` to the `_setBarAnchor` payload so the anchor X flows through; route the new anchor on `Popouts` via `_barAnchors`.
-5. The corner shape adapts automatically based on whether `anchor` is at a screen edge.
-
-No new PanelWindow created. No new animation timing to tune. Same wrapper, same morph behavior.
-
-**Adding a new standalone modal** (different positioning rules — e.g. centered drop-down, fullscreen): extend `Modal { edge: ...; align: ... }` with your content; add a `Variants { Foo { ... } }` block in `shell.qml`. Corner config and SVG path derived from `edge`+`align`. Same 280ms OutCubic animation timing.
-
-### Critical gotcha: `FileView.text` is a method, not a property
-
-Accessing `colorsFile.text` returns the function reference. Capture via signal:
-
-```qml
-FileView {
-    onLoaded: baseContents = text()
-}
-property string baseContents: ""
-```
-
-Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` do not.
+Corner shape adapts automatically. Same wrapper, same morph.
 
 ### Bar (top)
 
-- `barHeight: 48`, `cornerSize: 16` (= `gaps_out` 8 + window rounding 8).
-- `implicitHeight: barHeight + cornerSize`, `exclusiveZone: barHeight` — corners overhang into workspace without reserving extra space.
-- Layout sections anchor `verticalCenter: barBg.verticalCenter` (not parent's), so they sit in the bar text area, not the corner overhang.
-- Inverse corners (Caelestia style) drawn with `Shape` + `PathArc`. Same color as bar.
-- Volume reactive via `Quickshell.Services.Pipewire` (`Pipewire.defaultAudioSink.audio.volume/.muted` with `PwObjectTracker`). Battery + Bluetooth still poll every 2s via `Process` + `StdioCollector`.
-- Bar exposes `volumeRightX` and `bellRightX` (screen-relative X of icon right edges). `shell.qml` collects them into `_barAnchors[screenName]` so the matching `Popouts` panel anchors below the right icon.
-- Right side is wrapped in a `HoverHandler` so the popout stays open while the cursor crosses BETWEEN icons (tray → volume → bluetooth → battery → bell). Per-icon `MouseArea` only fires `onEntered` to set which popout to show; the wrapper's `onHoveredChanged` decides when to close.
-- **System tray** — `Quickshell.Services.SystemTray` items rendered as the left-most cluster on the right side, sized 20 px to match the other bar icons. **Hover** opens the item's menu inline via the shared Popouts wrapper (popout name `tray:<index>`), so tray menus get the same morph + content fade as volume/notifications. Left-click activates, middle-click is `secondaryActivate`, scroll wheel routes to `scroll(delta, false)`. No right-click handler — hovering already shows the menu. Tray icons render the SNI-provided icon as a plain `Image` (full color); we don't try to remap them through the theme. Most apps that ship a tray icon already provide a tray-suitable image, and the Colloid lookup adds visual inconsistency when only some apps have symbolic variants. This is the documented exception to the "all glyphs go through TintedIcon" rule.
-- **Workspaces cluster (center).** Per-workspace pills are non-interactive visual indicators only — no per-pill click/hover. The whole pill cluster (separate from the launcher icon) is a single hover trigger that opens the workspaces overview popout (popout name `"workspaces"`, edge=top centered Modal). Pills are styled as plain Rectangles (subtle fill + 1 px border, `cPrimary` border on the active workspace, idle 22 × 22 px, expanded width 44 px, animated 240 ms OutCubic) — sized to match the bar icons' visual height. Does not use `CardButton` because that brings interaction the cluster doesn't want.
-- **Launcher button.** First child of the center cluster, in its own Item with its own hover MouseArea (the cluster has no wrapping hover handler — each segment is independent). Renders the distro logo via a **Nerd Font glyph** rather than an icon-theme path: `bar.osLogoGlyph` is a switch on `shellRoot.osId` (read once from `/etc/os-release`'s `ID`) returning the matching codepoint from Nerd Fonts' Linux distro range (U+F300–U+F33F). Falls back to the generic Linux/Tux glyph for unmapped distros. Rendered as a plain `Text` element using `bar.fontFamily` (already a Nerd Font) tinted `cFg` / `cPrimary` on hover. Avoid icon-theme paths here — the typical `distributor-logo-<id>` icons in Colloid/Adwaita are full-color app-style logos that don't match the bar's monochrome aesthetic, and the symbolic `*-uptodate-symbolic` variants are checkmarks (designed for "system up to date" tray indicators, not as logos).
+- `barHeight: 48`, `cornerSize: 16` (= `gaps_out` 8 + window rounding 8). `implicitHeight: barHeight + cornerSize`, `exclusiveZone: barHeight` so corners overhang into workspace without reserving extra space.
+- Layout sections anchor `verticalCenter: barBg.verticalCenter` (not parent's), to sit in the bar text area, not the corner overhang.
+- Inverse corners drawn with `Shape` + `PathArc`.
+- Volume reactive via `Quickshell.Services.Pipewire`. Battery + Bluetooth poll every 2 s via `Process` + `StdioCollector`.
+- Right side wrapped in `HoverHandler` so the popout stays open while crossing BETWEEN icons. Per-icon `MouseArea` only fires `onEntered` to set which popout; the wrapper's `onHoveredChanged` decides when to close.
+- **System tray** — `Quickshell.Services.SystemTray` items at 20 px. Hover opens the menu inline via Popouts (name `tray:<index>`). Left-click activates, middle = `secondaryActivate`, scroll = `scroll(delta, false)`. **Tray icons render the SNI image as a plain `Image` (full color), not via TintedIcon** — most tray icons aren't symbolic and Colloid lookup is inconsistent. Documented exception to the "all glyphs through TintedIcon" rule.
+- **Workspaces cluster** — non-interactive pills (no per-pill click). Whole cluster hovers → workspaces overview popout. Pills are plain Rectangles (subtle fill + 1 px border, `cPrimary` on active, 22 → 44 px on active over 240 ms `OutCubic`); not `CardButton` because that brings interactivity.
+- **Launcher button** — distro logo via Nerd Font glyph (U+F300–U+F33F), not icon-theme path. `bar.osLogoGlyph` switches on `shellRoot.osId` (parsed from `/etc/os-release`). Falls back to generic Tux glyph. Avoids the `distributor-logo-*` icons (full-color, off-aesthetic) and `*-uptodate-symbolic` (those are checkmarks, not logos).
+- **NeedsAttention** items get a small `cPrimary` dot below the icon with slow-pulse opacity. `Passive` items are filtered out per SNI spec.
 
-  Hover → `bar.launcherEnter` → `shellRoot.launcherEnter(screen)`; the launcher's own panel-hover routes back through the same counter so cursor handoff from icon to panel keeps it open. Hover-leave starts a 250 ms close timer. IPC `qs ipc call launcher show|hide|toggle` still works for keyboard binds.
-- **Status filtering / NeedsAttention.** Per the SNI spec, hosts only render `Active` and `NeedsAttention` items; `Passive` items are filtered from the Repeater model. NeedsAttention items get a small `cPrimary` dot below the icon with a slow-pulse opacity animation, matching the "look at this" semantic.
-- **Tray menu rendering** (`TrayMenuContent.qml`):
-  - **Cascade layout.** The root menu is the rightmost column; hovering a parent entry for ~300 ms opens its children as a new column to the left (`menuPath` array, `Row { layoutDirection: RightToLeft }`). The cursor can travel between columns through a 6 px gap without closing — they're all inside the same popout's input mask.
-  - **Checkable / radio entries** show a checkbox- or radio-symbolic glyph reflecting `buttonType` (None/CheckBox/RadioButton) and `checkState` (Unchecked/PartiallyChecked/Checked). Without this, nm-applet's "Enable Wi-Fi" looks like a stateless action.
-  - **Mnemonic stripping.** GTK menu text often contains `_` markers (`_E` for "press E"); `_stripMnemonic` removes single underscores and collapses `__` → `_`.
-  - **Tooltip header** at the top of the root column shows `tooltipTitle` (and `tooltipDescription` if present) so users see, e.g., the current network SSID without poking at submenus.
-  - **Submenu lazy population** is handled automatically by `QsMenuOpener` — each cascade column has its own opener bound to a different handle, so pushing a column triggers the underlying DBusMenu `AboutToShow` cycle.
+### Tray menu (`TrayMenuContent.qml`)
 
-### Popouts wrapper (volume + notifications + calendar + power)
+- **Cascade** — root menu rightmost; hovering a parent for ~300 ms opens a child column to the left (`menuPath` array, `Row { layoutDirection: RightToLeft }`). 6 px gap between columns is inside the popout's input mask, so cursor handoff is safe.
+- **Checkable / radio** — show check/radio glyph based on `buttonType` and `checkState`. Without this, nm-applet's "Enable Wi-Fi" looks stateless.
+- **Mnemonic stripping** — `_stripMnemonic` removes single `_`, collapses `__` → `_`.
+- **Tooltip header** at the top of the root column (`tooltipTitle` + `tooltipDescription`).
+- **Lazy submenu** — handled by `QsMenuOpener`; each cascade column has its own opener.
 
-`Popouts.qml` is one PanelWindow per side per screen — instantiated twice via `Variants` (`side: "right"` and `side: "left"`). Right side hosts volume + notifications; left side hosts calendar + power. **Cross-side hover (e.g. calendar → volume) is a close-and-open of two independent windows, not a slide across the screen.** Same-side switches morph: the inner `panel` Item animates `x`/`width`/`height` over 280ms `OutCubic`; content fades over the same duration.
+### Popouts wrapper
 
-`_activeAnchor` is managed imperatively (Connections → `onCurConfigChanged`):
-- **Opening** (closed → popout): `_activeAnchor` is set instantly to the new target (Behavior disabled), then `panel.width` animates 0 → target. Result: the anchor edge stays pinned (right edge for right-side, left edge for left-side); the panel grows away from it.
-- **Switching** (popout A → popout B on same side): `_activeAnchor` animates from A's anchor to B's; `panel.width` animates from A's width to B's. Smooth morph.
-- **Closing** (popout → null): `_activeAnchor` is left untouched; `panel.width` animates → 0. Anchor edge stays pinned; panel shrinks toward it.
+One PanelWindow per side per screen — `Variants` × 2 (right hosts volume/notifications/tray; left hosts calendar/power). **Cross-side hover is close-and-open of two windows, not a slide.** Same-side switches morph (280 ms `OutCubic`).
 
-- `WlrLayershell.layer: Overlay` so the cursor at the bar/popout overlap is always on the popout — bar (`Top`) doesn't steal hover.
-- Input `mask` cuts out the top `barHeight` strip so bar's MouseAreas still receive hover events (for switching popouts via icon hover).
-- Each popout has `{ side: "left"|"right", anchor: <X> }`:
-  - `volume` → side right, anchor `volumeRightX` (volume icon's right edge).
-  - `notifications` → side right, anchor `root.width` (flush against screen edge).
-  - `calendar` → side left, anchor `clockLeftX` (clock's left edge).
-  - `power` → side left, anchor `powerLeftX` (currently 0 — flush against screen left edge).
-  - `tray:<index>` → side right, anchor `trayItemRightX` (the hovered tray icon's right edge — Bar updates this on each tray-icon `onEntered`). Single shared `trayLoader` renders whichever item the current `tray:N` resolves to via `SystemTray.items.values[N]`.
-- Corner config adapts to edge state:
-  - `_leftAtEdge` (panel's left at x=0) → TL+BL flush.
-  - `_rightAtEdge` (panel's right at root.width) → TR+BR flush.
-  - Otherwise outer (top) is inverse and bottom is rounded.
-- `contentArea`'s `leftMargin`/`rightMargin` flip between `0` and `invRadius` to match the corner config (so content doesn't bleed into the inverse-curve area).
-- `panel.clip: true` hides content overflow during morph (e.g. notifs' wider content as the wrapper shrinks toward volume's narrower size).
+`_activeAnchor` managed imperatively via `Connections.onCurConfigChanged`:
+- Open: set anchor instantly (Behavior disabled), then animate `panel.width` 0 → target. Anchor edge stays pinned; panel grows away.
+- Switch: animate both `_activeAnchor` and `panel.width` from A → B.
+- Close: leave anchor untouched; animate `panel.width` → 0.
 
-#### Notifications grouping + age labels
+- `WlrLayershell.layer: Overlay` so the cursor at bar/popout overlap is on the popout (bar is `Top` → can't steal hover).
+- Input `mask` cuts the top `barHeight` strip so bar MouseAreas still receive hover (for switching popouts via icon hover).
+- Per popout `{ side, anchor }`: volume → right + `volumeRightX`; notifications → right + `root.width`; calendar → left + `clockLeftX`; power → left + `powerLeftX`; `tray:<i>` → right + `trayItemRightX` (Bar updates per tray-icon `onEntered`; single shared `trayLoader` resolves via `SystemTray.items.values[N]`).
+- Corner config: `_leftAtEdge` → TL+BL flush; `_rightAtEdge` → TR+BR flush; otherwise top inverse + bottom rounded. `contentArea` left/right margins flip between `0` and `invRadius` to match. `panel.clip: true` hides overflow during morph.
 
-`NotificationsContent` groups by `appName`. Single-notif groups render as one card; multi-notif groups render compactly with the latest visible and a chevron — clicking the card or header toggles expand. Group close-X dismisses every notif in that group; in expanded mode each notif also has its own small close-X.
+### Notifications
 
-Arrival timestamps live in `shellRoot.notifReceivedAt` (map keyed by `Notification.id`), set in `popNotif` and deleted in the `closed` handler. Bound age labels read from this map plus `shellRoot._notifNow`, which a 30 s `Timer` reassigns to refresh "5m"-style labels without redrawing per-second. Per-app expand state is local to `NotificationsContent.expandedGroups` (map keyed by appName); cleared automatically when the popout content is destroyed via Loader inactive.
+`NotificationsContent` groups by `appName`. Single-notif groups render as one card; multi as compact card with chevron + click-to-expand. Group close-X dismisses all; per-notif close-X in expanded mode.
 
-#### Notification mute
-
-Click the bell icon to toggle `shellRoot.notifMuted`. While muted, `popNotif` records the timestamp and connects the cleanup-on-close handler as usual but skips the auto-pop strip — incoming notifications are still tracked and visible in the center on hover, just not surfaced as toasts. The bell icon swaps to `notifications-disabled-symbolic` and tints to `cMuted`; the count badge dims to `cMuted` too. Hover still opens the notifications popout independently of mute state.
+- Arrival timestamps in `shellRoot.notifReceivedAt` (map keyed by `Notification.id`); set in `popNotif`, deleted in the `closed` handler.
+- `shellRoot._notifNow` reassigned every 30 s to refresh "5m" labels without per-second redraw.
+- Per-app expand state local to `NotificationsContent.expandedGroups`; cleared via Loader inactive.
+- **Mute** — bell click toggles `shellRoot.notifMuted`. Muted: `popNotif` still tracks but skips the toast strip; bell icon swaps to `notifications-disabled-symbolic` and tints `cMuted`. Hover still opens the popout.
 
 ### Standalone modals (AppLauncher, ThemeSwitcher)
 
-Both extend `Modal.qml`. The base derives corner config from `edge` + `align` and builds the SVG path generically. **Animates BOTH `implicitWidth` and `implicitHeight`** at 280ms `OutCubic` (panel grows diagonally from its anchor corner — same drawer feel as Popouts).
+Both extend `Modal.qml` — derives corner config from `edge`+`align`, builds SVG path generically, animates BOTH `implicitWidth` and `implicitHeight` 280 ms `OutCubic` (drawer feel matching Popouts).
 
-- `WlrLayershell.layer: Overlay`. Input mask excludes top `barHeight` strip on top-anchored modals.
-- `closeOnOutsideClick: true` (AppLauncher only) — expands the PanelWindow to fullscreen and adds a transparent click-catcher MouseArea behind the visible panel. `_animatingClose` linger keeps `_fullscreen=true` until the close animation finishes so the panel has somewhere to animate inside.
+- `WlrLayershell.layer: Overlay`. Mask excludes top `barHeight` on top-anchored modals.
+- `closeOnOutsideClick: true` (AppLauncher only) — expands the PanelWindow fullscreen + transparent click-catcher behind. `_animatingClose` keeps `_fullscreen=true` until the close animation finishes so the panel has somewhere to animate inside.
 
-#### Bar popout IPC
+**AppLauncher** — top-center. IPC: `qs ipc call launcher show|hide|toggle`. `WlrLayershell.keyboardFocus: Exclusive` while open; focus grabbed via 60 ms timer (`Qt.callLater` fires too early before the surface is mapped).
 
-The Popouts wrapper exposes IPC for the power menu:
+**ThemeSwitcher** — bottom-center. Peek strip `collapsedHeight: 8` → `expandedHeight: 260` on hover. Internal 250 ms grace timer absorbs Wayland leave/enter spam during surface resize.
+- Sets `surfaceHeight: expandedHeight` so the Wayland layer surface stays a constant 260 px and only the inner panel animates 8 ↔ 260. Without this, repeated surface-resize leaves a ghost copy of the inverse-rounded bottom corners (looks like a "second bar with inverse rounds" lagging).
+- Modal promotes inverse corners to flush when `H < invRadius`. At the 8 px peek the elliptical inverse arc squashes into a stub that reads as a stray curl — flat-bottom looks intentional.
+- Hover from two sources combined via `_hoverSources` counter: Modal's root `HoverHandler` and an `EdgeBumper` at the screen bottom.
 
-- `qs ipc call power show | hide | toggle` — `popoutShow("power")` / `popoutHide()`.
+### Workspaces overview
 
-`shellRoot.popoutForced` is the IPC-driven name; `popoutHover` overrides it whenever the user hovers a different bar trigger. Both feed `popoutCurrent`. Closing a popout from inside (e.g. clicking a power-menu action) goes through `requestClose` → `popoutHide()`.
+Hover-driven Modal (top edge, centered), name `"workspaces"`. Thumbnails are PNGs captured by `grim`:
 
-#### AppLauncher
+- Cache: `$XDG_RUNTIME_DIR/quickshell/workspace-thumbs/<id>.png`. Wiped on reboot.
+- Trigger: every workspace focus change (after 300 ms settle so the switch animation is done) + 5 s periodic for the active workspace.
+- **Atomic write** — `grim` writes `<id>.png.tmp`, shell renames to `<id>.png`. Without this, `Image` readers can pick up half-written files ("Unable to read image data").
+- **Cache busting** — `Image.cache: false` isn't enough; QML doesn't re-read when the source URL string is unchanged. `shellRoot._workspaceThumbVersion` increments after each capture; per-card `Connections.onThumbVersionChanged` resets `Image.source` to "" then back to path. Don't try `?v=N` — QML treats `file://` URLs as literal filenames.
+- Multi-monitor: captures only the focused workspace's monitor (`grim -o <name>`). Each workspace is bound to one monitor in Hyprland.
 
-- `edge: "top"; align: "center"` — symmetric inverse top corners, rounded bottom corners.
-- IPC: `qs ipc call launcher show | hide | toggle`.
-- `WlrLayershell.keyboardFocus: Exclusive` while open so the search input receives input. Focus is grabbed via a 60ms timer after open (`Qt.callLater` fires too early before the surface is mapped).
-- Click outside closes (via `closeOnOutsideClick`).
+### Adding a non-bar edge modal
 
-#### ThemeSwitcher
+Wayland sends pointer-leave when the cursor lands on the very last pixel row of a surface — closing the modal mid-open. `EdgeBumper` bleeds 1 px past the edge on its own surface to dodge this.
 
-- `edge: "bottom"; align: "center"` — at screen-bottom edge, so BL/BR are flush; rounded TL/TR.
-- Always-on peek strip (height `collapsedHeight: 8`) expands to `expandedHeight: 260` on hover. Internal grace timer (250ms) absorbs Wayland leave/enter events that fire during surface resize.
-- Sets `surfaceHeight: expandedHeight` so the Wayland layer surface stays a constant 260 px and only the inner panel animates 8 ↔ 260. Without this, the compositor's repeated surface-resize cycle leaves a ghost copy of the inverse-rounded bottom corners visible while the panel collapses (looks like a "second bar with inverse rounds" lagging behind the visible panel).
-- Modal promotes inverse corners to flush when `H < invRadius`. At the 8 px peek the elliptical inverse arc squashes into a near-flat stub that reads as a stray curl rather than a corner; flat-bottom looks intentional. Transition happens late in the collapse animation so the snap is almost invisible.
-- Hover detection comes from **two sources** combined via a counter (`_hoverSources` in `ThemeSwitcher.qml`, mirrors `shellRoot._hoverDepth`): Modal's own root-level `HoverHandler` and an `EdgeBumper` at the screen bottom. See "Adding a non-bar edge modal" below for the reusable pattern.
+1. Modal subclass: `property bool externalHovered: false; onExternalHoveredChanged: externalHovered ? panelEnter() : panelLeave()`. Implement `_hoverSources` counter so enter/leave increment/decrement instead of toggling — keeps hover stable when the cursor crosses between bumper and panel (see `ThemeSwitcher.qml`).
+2. shell.qml: add the modal's `Variants` block with `externalHovered: shellRoot._bumperHovered("<name>", modelData.name)`.
+3. shell.qml: parallel `Variants { EdgeBumper }` with `edge`, `hitWidth`, and `onBumperEnter/Leave` calling `_setBumperHover("<name>", modelData.name, ...)`.
 
-#### Workspaces overview (thumbnail popout)
+Registry (`_bumperHover`, `_bumperHovered`, `_setBumperHover`) is generic — no per-modal property needed.
 
-Hover-driven Modal (top edge, centered) that drops below the workspace cluster. Reuses the standard `popoutEnter`/`popoutLeave` machinery under the name `"workspaces"`, including owner-screen scoping for multi-monitor.
+## Critical invariants & gotchas
 
-Thumbnails are cached PNGs captured by `grim`:
+### `FileView.text` is a method, not a property
 
-- **Cache dir:** `$XDG_RUNTIME_DIR/quickshell/workspace-thumbs/<id>.png`. Wiped on reboot — no stale-from-last-session screenshots.
-- **Capture trigger:** every workspace focus change (after a 300 ms settle so the switch animation is done) plus a 5 s periodic timer for the active workspace, so thumbs stay fresh while the overview sits open.
-- **Atomic write:** `grim` writes to `<id>.png.tmp` and the shell renames it to `<id>.png` on success. Without this, `Image` readers can pick up half-written files and log "Unable to read image data".
-- **Cache busting in QML:** `Image.cache: false` alone isn't enough — when the source URL string is unchanged, QML doesn't re-read. `shellRoot._workspaceThumbVersion` is incremented after every successful capture; `WorkspacesContent`'s per-card `Connections { onThumbVersionChanged }` resets `Image.source` to "" then to the path so it re-reads from disk. Don't try `?v=N` query strings on `file://` URLs — QML treats the entire URL as the literal filename.
-- **Multi-monitor:** captures only the focused workspace's monitor (`Hyprland.focusedWorkspace.monitor.name` → `grim -o`). Each workspace is bound to one monitor in Hyprland, so this is correct.
+Accessing `colorsFile.text` returns the function reference. Capture via signal:
+```qml
+FileView { onLoaded: baseContents = text() }
+property string baseContents: ""
+```
+Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` do not.
 
-#### Adding a non-bar edge modal
+### Inactive Loaders need `enabled: false` AND `z: 0`
 
-For a Modal anchored to a screen edge (top or bottom) that hover-triggers from cursor proximity to that edge, you need an `EdgeBumper` because Wayland sends a pointer-leave when the cursor lands on the very last pixel row of a surface — closing the modal mid-open. The bumper bleeds 1 px past the edge on its own invisible surface so the visible modal stays fully on-screen.
-
-1. Modal subclass: declare `property bool externalHovered: false` and `onExternalHoveredChanged: externalHovered ? panelEnter() : panelLeave()`. Implement `_hoverSources` counter so `onPanelEnter`/`onPanelLeave` increment/decrement instead of unconditionally toggling — keeps hover stable when the cursor crosses between the bumper and the visible panel (see `ThemeSwitcher.qml` for the reference shape).
-2. shell.qml: add the modal to its `Variants` block as usual, with `externalHovered: shellRoot._bumperHovered("<modalName>", modelData.name)`.
-3. shell.qml: add a parallel `Variants` block for `EdgeBumper` with `edge: "bottom"` (or `"top"`), `hitWidth: <modal.panelTotalWidth>`, and `onBumperEnter`/`onBumperLeave` calling `shellRoot._setBumperHover("<modalName>", modelData.name, true/false)`.
-
-`<modalName>` is any unique string. The registry (`_bumperHover`, `_bumperHovered`, `_setBumperHover`) is generic — no per-modal property needed.
-
-## Style + consistency rules
-
-### Buttons
-
-`CardButton.qml` is the single source of truth for clickable button surfaces. Every interactive button in the shell uses it (PowerMenu cards, Volume mute + transport, ThemeSwitcher dark/light + reset, Calendar prev/next, Notifications "Clear all" + alt-action buttons + close-X, Bar workspace pills). Visual contract:
-
-- Radius **12** by default; override to `height/2` for round (workspace pills, notification close-X).
-- **Default fill** `Qt.rgba(cFg.r, cFg.g, cFg.b, 0.06)`; **highlighted fill** `Qt.rgba(..., 0.18)`.
-- **Default border** `Qt.rgba(cFg.r, cFg.g, cFg.b, 0.10)`; **highlighted border** `cPrimary`.
-- Border width **1** flat; transitions are 120ms `ColorAnimation`.
-- `highlighted = hovered || active` — set `active: someBoundCondition` for stateful buttons (mute toggle, current workspace, selected accent), don't manually mirror `containsMouse`.
-- Cursor is `PointingHandCursor` automatically.
-
-**Don't hand-roll a button with Rectangle + MouseArea + custom hover colors.** The only intentional opt-out is the AppLauncher list delegate, which has tighter timing requirements (selection state synced with keyboard navigation) — its custom delegate stays in `AppLauncher.qml`.
-
-### Sizing buttons in layouts
-
-Use `implicitWidth` / `implicitHeight` on `CardButton` (not `Layout.preferredWidth/Height`) — the size hint then flows naturally through `RowLayout`/`ColumnLayout` AND establishes the correct hit-box for hover.
-
-### Icons
-
-`TintedIcon.qml` is the single source for symbolic icons. Two modes:
-
-1. **Theme-resolved** (preferred, default): set `name`, leave `iconBase` empty. Resolves through `Quickshell.iconPath(name)`, which honors the active icon theme + inheritance chain (Colloid-Dark → Adwaita → hicolor for things Colloid doesn't ship, e.g. media controls).
-2. **Direct path**: set `iconBase` to a directory and `name` is treated as `<iconBase>/<name>.svg`. Used by PowerMenu (`/.local/share/icons/Colloid-Dark/actions/symbolic/`) for icons known to exist at a specific location.
-
-Tint is mandatory and should be `cFg` for body icons, `cPrimary` for accent/state icons.
-
-**Use Colloid icons exclusively for any visual glyph.** No ASCII/Unicode text glyphs (▾ ▸ ✕ ✓ → etc.) — even small chevrons, close marks, and arrows go through `TintedIcon` so they pick up the icon theme's stroke weight and stay consistent with everything else. If Colloid doesn't ship the exact glyph, the inheritance chain falls back to Adwaita/hicolor; if even that doesn't exist, add a custom SVG to a known location and use the direct-path mode rather than falling back to text. Common names worth knowing: `pan-end-symbolic` / `pan-down-symbolic` (chevrons), `go-previous-symbolic` / `go-next-symbolic` (back/forward), `window-close-symbolic` (✕), `media-playback-{start,pause,stop}-symbolic`.
-
-### Hover hit-boxes
-
-Bar icons (volume, bell, power, clock) use a `MouseArea` with negative `anchors.topMargin` / `bottomMargin` so the hit-box fills the full bar height while the visible icon stays its natural size. Pattern: `anchors.topMargin: -(bar.barHeight - icon.height) / 2`.
-
-### Bar icons trigger their popouts on hover, not click
-
-Every icon in the bar that has an associated popout/window opens it **on hover**, not on click. This includes volume, notifications (bell), calendar (clock), power, tray icons, the launcher logo, and the workspaces cluster. Click is reserved for stateful in-place toggles (the bell click toggles `notifMuted`, the volume mute icon click toggles audio mute) — *not* for opening windows.
-
-Hover-triggered popouts use one of two state machines:
-
-- **Bar popouts** (volume / notifications / calendar / power / tray / workspaces): route through `shellRoot.popoutEnter(name, screen)` / `popoutLeave()`. Single global `_hoverDepth` counter, single 250 ms close timer, single `popoutCurrent` + `popoutOwner` derivation. Wrapper window is `Popouts.qml` (or a dedicated Modal for centered ones like `workspaces`).
-- **Standalone modals that mimic popout-style hover** (launcher, ThemeSwitcher): each has its own state (`launcherOpen`, ThemeSwitcher's local `hovered`), its own `_launcherHoverDepth`-style counter, and its own close timer — but the *shape* of the state machine (counter increments on every enter, decrements on every leave, close timer fires only at zero) is the same as the bar popouts. AppLauncher's `panelEnter`/`panelLeave` signals route into the same counter so the cursor can hand off from the bar icon to the panel without dropping below zero.
-
-  **AppLauncher has dual open modes via `_launcherHoverManaged`:** when opened by hover, the flag is true and hover-leave closes via the 250 ms timer (same as any other popout). When opened by IPC / click (`launcherShow`, `launcherToggle`), the flag is false and hover events are ignored — the launcher stays open until `requestClose` / `launcherHide` / `launcherToggle` flips it. This way a keybind-summoned launcher doesn't close just because you moved the cursor off it, but a hover-summoned one closes naturally when you wander away. Hover entering an already-open IPC-launcher does NOT switch modes — the flag is only set when hover *opens* a closed launcher.
-
-When adding a new bar icon with a popout, follow the bar-popout path (hover-driven, name-keyed, owner-aware). Don't introduce a click-to-open icon — it'll feel inconsistent with everything else.
-
-### Modals are stateless containers; state lives in shell.qml
-
-Each modal/popout content (`PowerMenuContent`, `VolumeContent`, `NotificationsContent`, `CalendarContent`) is a plain `Item` with declared `implicitWidth` / `implicitHeight` and no `PanelWindow`. State (`popoutHover`, `popoutForced`, `popoutCurrent`, `popped`, etc.) lives in `shell.qml`. Closing from inside the content goes through a `requestClose` signal → `popoutHide()`.
-
-When adding a new bar popout, follow the recipe under "Adding a new bar popout" above — no new `PanelWindow` should be created.
-
-### Inactive Loaders must be `enabled: false` AND `z: 0`
-
-When stacking multiple Loaders inside the Popouts wrapper (one per popout), each Loader needs both:
-
-- `enabled: root.current === "<thisName>"` — so click events don't leak through the visible content to invisible buttons in inactive Loaders. (Real-world consequence: clicking a calendar cell triggered a hidden Power-Menu shutdown button.)
-- `z: root.current === "<thisName>" ? 1 : 0` — so the active Loader is z-topmost. On Qt6/Wayland, click events propagate through disabled siblings but **hover events do not**. Sibling Loaders may overlap in screen space (Power's 520×160 footprint covers Calendar's top-left prev/next buttons, for instance) — without the z bump, descendant `MouseArea` / `HoverHandler` on the active popout never see hover-enter when a disabled sibling is z-above them at the same point. Symptom: cursor changes to pointer on hover (cursor-shape uses a separate query path) but `containsMouse` stays false; click forces a hover re-evaluation, leaving the button stuck "hovered" until the next click.
-
-### Inverse-corner arcs are elliptical at small H
-
-When the panel collapses below `2 × invRadius`, a quarter-circle inverse arc can no longer fit (`R` clamps to `H/2`, but the carve width is `invRadius`). Two acceptable strategies:
-
-1. **Modal.qml** — use elliptical arcs `A invRadius R 0 0 0 …`. The carve keeps its `invRadius` width as the panel shrinks; only the vertical extent (`ry = R`) squashes. Body left/right edges stay anchored at `invRadius` so they don't drift inward. Required for ThemeSwitcher's 8 px peek strip.
-2. **Popouts.qml** — assumes the panel is always tall enough for `R = invRadius` to fit, so it uses simple circular arcs `A R R 0 0 0 …` and clamps `R` to `H/2` defensively.
-
-Don't switch back to circular arcs in `Modal.qml` without also clamping the carve width — the chord-vs-radius constraint breaks at small H and SVG silently up-scales the radius, drifting the curves.
-
-### Modal `surfaceHeight` vs inner panel height
-
-`Modal.qml` separates the Wayland-layer surface size (`surfaceHeight`, drives `implicitHeight`) from the visible inner panel height (`panel.height`, animates with `contentHeight`). Default: `surfaceHeight: contentHeight` — surface and panel animate together (AppLauncher).
-
-Override `surfaceHeight` to a constant when the panel toggles size frequently (e.g. ThemeSwitcher hover-collapse). Repeated layer-surface resize on Wayland produces a visible ghost of the previous-frame buffer. Keeping the surface a fixed size and animating only the inner panel avoids this.
-
-The mask follows the visible panel rect (not the surface) when not in fullscreen mode, so the unused portion of an oversized surface still passes input through.
+When stacking Loaders inside Popouts (one per popout), each needs both:
+- `enabled: current === "<this>"` — clicks don't leak through to invisible buttons. (Real consequence: clicking a calendar cell triggered a hidden Power-Menu shutdown button.)
+- `z: current === "<this>" ? 1 : 0` — active Loader is z-topmost. **On Qt6/Wayland, click events propagate through disabled siblings but hover events do not.** Without z bump, descendant `MouseArea`/`HoverHandler` never see hover-enter when a disabled sibling is z-above at the same point. Symptom: cursor changes to pointer but `containsMouse` stays false.
 
 ### Popout hover uses a depth counter, not per-icon timer
 
-`shellRoot._hoverDepth` is incremented on each `popoutEnter` and decremented on each `popoutLeave`; the 250ms close timer only restarts when depth hits 0. **Don't replace this with a simpler per-icon `onExited → timer.restart` pattern** — Wayland's event delivery doesn't guarantee that icon A's `onExited` fires before icon B's `onEntered`, so naive timer restarts cause the popout to "open then instantly close" when sweeping the cursor between adjacent triggers (e.g. volume → bell). The counter ignores ordering: as long as cursor is on at least one trigger or on a panel, the timer stays stopped.
+`shellRoot._hoverDepth` increments on `popoutEnter`, decrements on `popoutLeave`; close timer only restarts when depth hits 0. **Don't replace with per-icon `onExited → timer.restart`** — Wayland doesn't guarantee icon A's `onExited` fires before icon B's `onEntered`, so naive timer restarts cause "open then instantly close" when sweeping between adjacent triggers (e.g. volume → bell).
 
-### Color sources
+AppLauncher's `_launcherHoverDepth` follows the same shape. **AppLauncher has dual modes via `_launcherHoverManaged`**: hover-opened → managed (250 ms close on leave); IPC/click-opened → unmanaged (stays open until explicit close). The flag is only set when hover *opens* a closed launcher; entering an already-open IPC launcher doesn't switch modes.
 
-See "No hardcoded colors" below. Quickshell QML always uses `cBg/cFg/cPrimary/cAccent/cMuted/cRed`. Even semi-transparent overlays should be `Qt.rgba(cFg.r, cFg.g, cFg.b, alpha)` rather than literal hex.
+### Inverse-corner arcs at small H
 
-## Animation timings
+When the panel collapses below `2 × invRadius`, a quarter-circle inverse arc can no longer fit. Two valid strategies:
+- `Modal.qml` — elliptical arcs (`A invRadius R 0 0 0 …`). Carve keeps `invRadius` width; only the vertical extent squashes. Required for ThemeSwitcher's 8 px peek.
+- `Popouts.qml` — assumes panel is always tall enough; uses circular arcs (`A R R 0 0 0 …`) and clamps `R` to `H/2` defensively.
 
-Pick the right tier for new animations:
+Don't switch back to circular arcs in `Modal.qml` without clamping the carve width — the chord-vs-radius constraint breaks at small H.
 
-- **Panel reveal / morph** (Popouts size + position, Modal open/close, ThemeSwitcher hover-expand): **280ms `OutCubic`**.
-- **Cross-icon close grace timer**: 250ms (slightly less than animation, by design).
-- **Workspace pill width** (active indicator): 240ms `OutCubic`.
-- **Micro-interactions** (hover color/border tint, opacity changes, button hover): **120ms** (color animation, no easing curve).
-- **Workspace number opacity** (active fade-in): 120ms (tier match).
+### Modal `surfaceHeight` vs panel height
 
-Centralize via `Modal.animDuration` (default 280) when extending Modal. Popouts hardcodes 280 to match.
+`Modal.qml` separates the Wayland-layer surface size (`surfaceHeight` → `implicitHeight`) from the inner `panel.height`. Default `surfaceHeight: contentHeight` — they animate together (AppLauncher).
 
-## No hardcoded colors
+Override to a constant when the panel toggles size frequently (ThemeSwitcher): repeated layer-surface resize on Wayland leaves a visible ghost of the previous-frame buffer. Mask follows the visible panel rect so the unused portion still passes input through.
 
-**Any color value used anywhere in dotfiles must resolve to `colors.json` (or a palette file derived from it).** Never paste a literal `#xxxxxx` into a config or template.
+## Style + consistency
 
-How each tool references colors:
+### Colors
+
+Any color anywhere in dotfiles must resolve to `colors.json` (or a derived palette). No literal `#xxxxxx` in configs/templates.
 
 | Tool | Mechanism |
 |---|---|
-| Quickshell QML | `cBg`, `cFg`, `cPrimary`, etc. properties bound to `colors.ui.*`; ANSI accessed via `colors.ansi.*` |
-| oh-my-posh | palette refs `p:primary`, `p:accent`, `p:yellow`, etc. (palette is generated from `colors.json.ui` + `colors.json.ansi`) |
-| kitty | named directives (`background`, `foreground`, `color0..15`, `url_color`) written by render script |
-| GTK | `@define-color window_bg_color`/etc. for libadwaita; class selectors use generated rgba values |
-| bash | `$BG`, `$FG`, `$PRIMARY`, etc. exports (generated `bashrc/colors`) |
-| Hyprland | `$ACCENT`, `$PRIMARY`, `$BG`, `$FG`, `$MUTED`, `$BORDER` defined in generated `.config/hypr/conf/colors.conf` (sourced from `visuals.conf`) — drives `col.active_border` and any other color refs |
+| Quickshell QML | `cBg`, `cFg`, `cPrimary`, `cAccent`, `cMuted`, `cRed`. Semi-transparent overlays via `Qt.rgba(cFg.r, cFg.g, cFg.b, alpha)` |
+| oh-my-posh | `p:primary`, `p:accent`, `p:bg`, `p:mantle`, `p:fg`, `p:url`, `p:muted`, `p:border` (UI; live-updating) + `p:black/red/...` (ANSI; stable) |
+| kitty | named directives (`background`, `color0..15`, `url_color`) |
+| GTK | `@define-color window_bg_color`, etc. |
+| bash | `$BG`, `$FG`, `$PRIMARY`, etc. |
+| Hyprland | `$ACCENT`, `$PRIMARY`, `$BG`, `$FG`, `$MUTED`, `$BORDER` |
 
-The oh-my-posh palette is composed from BOTH `colors.json.ui` and `colors.json.ansi`, exposed as:
+ANSI refs are for "I want a fixed hue" (git uses `p:yellow` so it contrasts with any accent).
 
-- `p:bg`, `p:mantle`, `p:fg`, `p:primary`, `p:accent`, `p:url`, `p:muted`, `p:border` — semantic UI colors (live-updating with override)
-- `p:black`, `p:red`, `p:green`, `p:yellow`, `p:blue`, `p:magenta`, `p:cyan`, `p:white` (+ `bright_*` variants) — ANSI palette (stable; "always this hue regardless of accent")
+**Known exception:** the 14-element `mochaAccents` array in `shell.qml` is hardcoded hex — represents *available* options, not the active theme. Move to a `palettes/` dir if expanded.
 
-ANSI refs are perfect for "I want a fixed hue" (git uses `p:yellow` so it contrasts with any accent).
+### Buttons
 
-### Known exception: `mochaAccents` array in `shell.qml`
+`CardButton.qml` is the single source of truth. Used everywhere: PowerMenu, Volume mute/transport, ThemeSwitcher reset, Calendar prev/next, Notifications close-X, workspace pills, etc.
 
-The 14 Catppuccin Mocha accent options listed in `shell.qml` are hardcoded hex values. They represent *available* theme options, not the active theme. If we later add a `palettes/` directory of theme options, move them there.
+- Radius **12** (override to `height/2` for round).
+- Default fill `Qt.rgba(cFg…, 0.06)`; highlighted `0.18`. Default border `0.10`; highlighted `cPrimary`. Border 1 px, transitions 120 ms `ColorAnimation`.
+- `highlighted = hovered || active` — set `active:` for stateful buttons (mute, current workspace, selected accent); don't manually mirror `containsMouse`.
+- `PointingHandCursor` automatic.
 
-## Branch icon
+Use `implicitWidth/Height` (not `Layout.preferredWidth/Height`) so the size flows through layouts AND establishes the hover hit-box.
 
-The `git` segment uses `branch_icon` property (not template prefix) — oh-my-posh auto-prepends it to `.HEAD`. Setting both causes a duplicate. Current value: ` ` (Devicons git branch glyph).
+**Don't hand-roll a button** with Rectangle + MouseArea. Only intentional opt-out: AppLauncher list delegate (selection state synced with keyboard nav).
+
+### Icons
+
+`TintedIcon.qml` is the single source for symbolic icons.
+- **Theme-resolved (default)** — set `name`, leave `iconBase` empty. Goes through `Quickshell.iconPath(name)`, honoring inheritance (Colloid-Dark → Adwaita → hicolor).
+- **Direct path** — set `iconBase` to a directory; `name` becomes `<iconBase>/<name>.svg`. Used by PowerMenu.
+- Tint mandatory: `cFg` body, `cPrimary` accent/state.
+
+**Use Colloid icons exclusively.** No ASCII/Unicode glyphs (▾ ▸ ✕ ✓ →). Common names: `pan-{end,down}-symbolic` (chevrons), `go-{previous,next}-symbolic`, `window-close-symbolic`, `media-playback-{start,pause,stop}-symbolic`. Documented exceptions: tray icons (full-color, not theme-resolvable) and bar launcher logo (Nerd Font glyph).
+
+### Hover hit-boxes
+
+Bar icons use `MouseArea` with negative `anchors.{top,bottom}Margin` so the hit-box fills bar height while the visible icon stays natural size. Pattern: `anchors.topMargin: -(bar.barHeight - icon.height) / 2`.
+
+### Bar icons hover-trigger; click is for in-place toggles
+
+Every bar icon with an associated popout/window opens it on **hover**. Click is reserved for stateful toggles (bell click → mute, volume mute icon → audio mute). Don't introduce a click-to-open icon.
+
+Two state machines:
+- **Bar popouts** — `popoutEnter(name, screen)` / `popoutLeave()`. Single global `_hoverDepth`, single 250 ms close timer, single `popoutCurrent` + `popoutOwner`.
+- **Standalone modals (launcher, ThemeSwitcher)** — same shape (depth counter, close timer at zero) but local state.
+
+### Modals are stateless containers
+
+Each `*Content.qml` is a plain `Item` with `implicitWidth`/`implicitHeight` and no `PanelWindow`. State (`popoutHover`, `popoutForced`, `popoutCurrent`) lives in `shell.qml`. Inside-content close goes through a `requestClose` signal → `popoutHide()`.
+
+## Animation timings
+
+| Tier | Duration | Curve | Used for |
+|---|---|---|---|
+| Panel reveal/morph | 280 ms | OutCubic | Popouts size+position, Modal open/close, ThemeSwitcher hover-expand |
+| Cross-icon close grace | 250 ms | — | Popout close timer (slightly less than panel anim, by design) |
+| Workspace pill width | 240 ms | OutCubic | active indicator |
+| Micro-interactions | 120 ms | ColorAnimation | hover tint, opacity, button hover |
+
+Centralize via `Modal.animDuration` (default 280) when extending Modal.
 
 ## Accent picker writes 9 fields
 
 Clicking a Catppuccin Mocha accent writes via inline Python to override:
-
 - `theme.gtk` → `catppuccin-mocha-<name>-standard+default`
 - `theme.cursor` → `catppuccin-mocha-<name>-cursors`
-- `ui.primary`, `ui.accent`, `ui.url` → accent hex (all three unified)
-- `ui.bg` → accent × 0.13 (tinted dark)
-- `ui.mantle` → accent × 0.10 (slightly darker)
-- `ui.muted` → accent × 0.40
-- `ui.border` → accent × 0.28
+- `ui.primary`, `ui.accent`, `ui.url` → accent hex (unified)
+- `ui.bg` → accent × 0.13; `ui.mantle` × 0.10; `ui.muted` × 0.40; `ui.border` × 0.28
 
 Untouched: `ansi.*` (terminal apps assume "red is red"), `ui.fg` (readability).
 
@@ -391,56 +273,59 @@ Untouched: `ansi.*` (terminal apps assume "red is red"), `ui.fg` (readability).
 
 ```
 dotfiles/
-├── new_install.sh              # orchestrator (runs scripts/* in order)
-├── CLAUDE.md                   # this file
-├── packages/{pacman,aur}       # `- pkgname` per line
-├── scripts/                    # one concern each, independently runnable
-│   ├── configure_pacman.sh      # pacman.conf edits: enable [multilib];
-│   │                            #   points SDDM SessionDir at a custom dir
-│   │                            #   with only hyprland-uwsm.desktop so the
-│   │                            #   plain hyprland.desktop is not listed
-│   ├── install_pacman_packages.sh
-│   ├── install_yay.sh
-│   ├── install_aur_packages.sh  # --skippgpcheck so AUR keys don't prompt
-│   ├── install_gpu_drivers.sh   # interactive picker (only user input)
-│   ├── install_colloid_icons.sh # git clone + ./install.sh -b
-│   ├── enable_services.sh       # sddm, NM, bluetooth, hyprpolkitagent (user)
-│   ├── render_configs.sh        # colors.json + override → generated configs
-│   ├── symlink_dotfiles.sh      # .config/* → ~/.config/, home/* → ~/
-│   ├── apply_gsettings.sh       # gsettings + hyprctl setcursor
-│   ├── reload_all.sh            # IPC live-reload
-│   └── hook_bashrc.sh           # ~/.bashrc sources bashrc/ fragments
-├── templates/                  # hand-edited bases for generators
-│   └── ohmyposh.omp.json        # prompt structure (no palette)
-├── .config/                    # → ~/.config/
-└── home/                       # → $HOME (.gtkrc-2.0 is generated)
+├── new_install.sh           # orchestrator
+├── packages/{pacman,aur}    # `- pkgname` per line
+├── scripts/                 # one concern each, runnable on its own
+│   ├── configure_pacman.sh    # enable [multilib]; point SDDM SessionDir at
+│   │                          #   /usr/local/share/wayland-sessions/ which
+│   │                          #   only contains hyprland-uwsm.desktop (so
+│   │                          #   plain hyprland.desktop isn't listed)
+│   ├── install_{pacman,aur,gpu_drivers,colloid_icons,yay,sddm_theme}.sh
+│   ├── enable_services.sh     # sddm, NM, bluetooth, hyprpolkitagent
+│   ├── render_configs.sh      # colors.json + override → generated configs
+│   ├── symlink_dotfiles.sh    # .config/* → ~/.config/, home/* → ~/
+│   ├── apply_gsettings.sh     # gsettings + hyprctl setcursor
+│   ├── reload_all.sh          # IPC live-reload
+│   └── hook_bashrc.sh
+├── templates/               # hand-edited bases for generators
+├── sddm-theme/dotfiles/     # SDDM greeter (Main.qml + metadata.desktop; theme.conf gen'd)
+├── .config/                 # → ~/.config/
+└── home/                    # → $HOME (.gtkrc-2.0 generated)
 ```
 
 ## Conventions
 
-- **Generated files are gitignored.** Source-of-truth + scripts are tracked. Templates for hybrid files (oh-my-posh) live in `templates/`.
-- **Script naming**: verb_object (`install_pacman_packages.sh`, `render_configs.sh`). Each script does one thing and is runnable on its own.
-- **Override-first edits**: settings UI writes override file, never base. User commits override → base only when explicitly desired.
-- **Live reload first, restart fallback**: prefer IPC. Document where it's impossible (GTK).
-- **No backwards-compatibility shims**: the user is iterating actively; obsolete code gets deleted, not deprecated.
-- **Don't pivot architecture from referenced material**: `origin/v1-(glass)` is for context, not a directive to mimic.
+- Generated files are gitignored; source-of-truth + scripts are tracked.
+- Script naming: `verb_object`. Each does one thing, runnable on its own.
+- Override-first edits: settings UI writes override, never base.
+- Live reload first, restart fallback. Document where it's impossible (GTK).
+- No backwards-compat shims — obsolete code gets deleted, not deprecated.
+- `origin/v1-(glass)` is for context, not a directive to mimic.
 
-## Hyprland config (`.config/hypr/`)
+## Hyprland (`.config/hypr/`)
 
 - Layout: **dwindle with `smart_split = true`** — cursor-position determines split direction. Avoids aspect-ratio surprises on near-square monitors.
-- `general.gaps_out = 8`, `decoration.rounding = 8` — paired with bar's `cornerSize = 16`.
-- Autostart: `nm-applet --indicator`, `livepaper --restore`, `qs` (Quickshell).
-- Session: **uwsm**. System services need explicit enable; user services start via session.
+- `gaps_out = 8`, `rounding = 8` — paired with bar's `cornerSize = 16`.
+- Autostart: `nm-applet --indicator`, `livepaper --restore`, `qs`.
+- Session: **uwsm**.
 
-## Catppuccin GTK theme: `box.vertical headerbar` workaround
+## SDDM greeter (`sddm-theme/dotfiles/`)
 
-Catppuccin's GTK4 CSS only paints `headerbar` background inside `box.vertical`. Plain `headerbar` (e.g., Electron menu bars) falls through to default light. Our `gtk.css` includes both `headerbar` and `box.vertical headerbar` selectors with the same transparent override.
+Mirrors `Lock.qml`'s aesthetic — same centered clock + date + 320 × 48 password card with primary-tinted focus border. Activated via `/etc/sddm.conf.d/theme.conf` (`Current=dotfiles`) by `install_sddm_theme.sh`.
 
-## VM-specific notes (current dev environment)
+- `Theme-API=2.0`, `QtVersion=6` (Arch's sddm 0.21+). Imports unversioned.
+- Colors come from `theme.conf` (gen'd by `render_configs.sh`), read in QML as `config.<key>`. Accent changes only reach the greeter on next `install_sddm_theme.sh` run — not part of the live `applyChain`.
+- **Installed copy, not symlink.** SDDM runs as user `sddm` pre-login; symlinking into a user homedir risks unreadable target (encrypted/late-mounted).
+- **No `Quickshell.iconPath` available.** Buttons use plain text labels styled like `CardButton` via inline `component CardBtn`. Documented exception to "all glyphs through TintedIcon" for the greeter context.
+- **Model role indices** (stable since SDDM 0.20): `SessionModel.NameRole = Qt.UserRole + 4`; `UserModel.NameRole = Qt.UserRole + 1`.
+- **Login is async** — `sddm.login(...)` returns immediately; wait for `loginSucceeded`/`loginFailed` via `Connections { target: sddm }`.
+- **Multi-monitor — interactive UI is primary-only.** SDDM instantiates `Main.qml` once per screen with independent state. Without gating, clicking the session/user picker on one screen wouldn't propagate. Fix: `visible: primaryScreen` on every interactive element (password input, error text, bottom-left pickers, bottom-right power buttons). Clock + date stay on every screen so non-primary monitors aren't black. Canonical pattern (matches breeze/maldives); don't try to share state via a singleton.
+- **User cycle button** mirrors the session button. `userModel.lastUser` is a name string, not an index — `_userIndexByName` translates on init.
 
-- Resolution `1914×999` is near-square. Without `smart_split = true`, dwindle splits 3rd window side-by-side (workspace half is ~949×945, marginally landscape).
-- Software rendering (no GPU passthrough). Hover events drop occasionally; not a bug in our code.
+## Misc
 
-## Memory file references
+- **oh-my-posh git** uses the `branch_icon` property (not template prefix) — oh-my-posh auto-prepends to `.HEAD`. Setting both causes a duplicate.
+- **Catppuccin GTK4 `headerbar` workaround** — Catppuccin's CSS only paints `headerbar` background inside `box.vertical`. Plain `headerbar` (e.g. Electron menu bars) falls through to default light. Our `gtk.css` includes both selectors with the same transparent override.
+- **VM dev environment** — resolution `1914×999` is near-square (motivates `smart_split`); software rendering drops occasional hover events.
 
-User has memory entries that this project context complements. Don't restate user-level preferences here; they live in `~/.claude/projects/-home-sun-dotfiles/memory/`.
+User-level preferences live in `~/.claude/projects/-home-sun-dotfiles/memory/` — don't restate here.

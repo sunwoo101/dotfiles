@@ -10,3 +10,4 @@
 .config/ohmyposh/theme.omp.json
 .config/hypr/conf/colors.conf
 home/.gtkrc-2.0
+sddm-theme/dotfiles/theme.conf

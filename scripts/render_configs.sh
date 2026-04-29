@@ -252,6 +252,19 @@ with open(os.path.join(hypr_dir, "colors.conf"), "w") as f:
     f.write(f"$FG      = {hyprland_hex(ui['fg'])}\n")
     f.write(f"$MUTED   = {hyprland_hex(ui['muted'])}\n")
     f.write(f"$BORDER  = {hyprland_hex(ui['border'])}\n")
+
+# sddm theme.conf — read by sddm-theme/dotfiles/Main.qml as `config.<key>`
+sddm_theme_dir = os.path.join(repo, "sddm-theme", "dotfiles")
+if os.path.isdir(sddm_theme_dir):
+    with open(os.path.join(sddm_theme_dir, "theme.conf"), "w") as f:
+        f.write("# generated from colors.json — do not edit\n")
+        f.write("[General]\n")
+        f.write(f"bg={ui['bg']}\n")
+        f.write(f"fg={ui['fg']}\n")
+        f.write(f"primary={ui['primary']}\n")
+        f.write(f"muted={ui['muted']}\n")
+        f.write(f"red={data['ansi']['red']}\n")
+        f.write("fontFamily=JetBrainsMono Nerd Font\n")
 PY
 
 echo "generated configs from colors.json"

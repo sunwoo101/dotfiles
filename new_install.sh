@@ -36,6 +36,7 @@ run install_aur_packages.sh
 run install_colloid_icons.sh
 run enable_services.sh
 run render_configs.sh
+run install_sddm_theme.sh
 run symlink_dotfiles.sh
 run apply_gsettings.sh
 run hook_bashrc.sh
