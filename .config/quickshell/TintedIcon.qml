@@ -21,6 +21,7 @@ Item {
     implicitHeight: size
 
     readonly property string _resolvedSource: {
+        if (!name) return "";
         if (iconBase) return "file://" + iconBase + name + ".svg";
         var p = Quickshell.iconPath(name);
         return p || "";

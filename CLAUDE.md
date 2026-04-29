@@ -86,6 +86,7 @@ Multi-file structure. `shell.qml` holds shared state; per-screen panels live in 
 │                               #   edge; bleeds 1 px past the edge to dodge Wayland's
 │                               #   pointer-leave at screen-edge row. Pair with any
 │                               #   non-bar Modal via shellRoot._bumperHover registry.
+├── WorkspacesContent.qml       # thumbnail grid for the workspaces overview popout
 ├── Lock.qml                    # WlSessionLock screen with PamContext auth
 ├── CardButton.qml              # reusable button surface (subtle fill + cPrimary border)
 └── TintedIcon.qml              # symbolic SVG via Quickshell.iconPath, recolored by MultiEffect
@@ -146,7 +147,11 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
 - Volume reactive via `Quickshell.Services.Pipewire` (`Pipewire.defaultAudioSink.audio.volume/.muted` with `PwObjectTracker`). Battery + Bluetooth still poll every 2s via `Process` + `StdioCollector`.
 - Bar exposes `volumeRightX` and `bellRightX` (screen-relative X of icon right edges). `shell.qml` collects them into `_barAnchors[screenName]` so the matching `Popouts` panel anchors below the right icon.
 - Right side is wrapped in a `HoverHandler` so the popout stays open while the cursor crosses BETWEEN icons (tray → volume → bluetooth → battery → bell). Per-icon `MouseArea` only fires `onEntered` to set which popout to show; the wrapper's `onHoveredChanged` decides when to close.
-- **System tray** — `Quickshell.Services.SystemTray` items rendered as the left-most cluster on the right side. **Hover** opens the item's menu inline via the shared Popouts wrapper (popout name `tray:<index>`), so tray menus get the same morph + content fade as volume/notifications. Left-click activates, middle-click is `secondaryActivate`, scroll wheel routes to `scroll(delta, false)`. There's no right-click handler — hovering already shows the menu, and switching to another tray icon morphs the popout to its anchor. Tray icons are full-color app icons (not symbolic), so they use a plain `Image` rather than `TintedIcon` — this is the documented exception to the "all glyphs go through TintedIcon" rule.
+- **System tray** — `Quickshell.Services.SystemTray` items rendered as the left-most cluster on the right side, sized 20 px to match the other bar icons. **Hover** opens the item's menu inline via the shared Popouts wrapper (popout name `tray:<index>`), so tray menus get the same morph + content fade as volume/notifications. Left-click activates, middle-click is `secondaryActivate`, scroll wheel routes to `scroll(delta, false)`. No right-click handler — hovering already shows the menu. Tray icons render the SNI-provided icon as a plain `Image` (full color); we don't try to remap them through the theme. Most apps that ship a tray icon already provide a tray-suitable image, and the Colloid lookup adds visual inconsistency when only some apps have symbolic variants. This is the documented exception to the "all glyphs go through TintedIcon" rule.
+- **Workspaces cluster (center).** Per-workspace pills are non-interactive visual indicators only — no per-pill click/hover. The whole pill cluster (separate from the launcher icon) is a single hover trigger that opens the workspaces overview popout (popout name `"workspaces"`, edge=top centered Modal). Pills are styled as plain Rectangles (subtle fill + 1 px border, `cPrimary` border on the active workspace, idle 22 × 22 px, expanded width 44 px, animated 240 ms OutCubic) — sized to match the bar icons' visual height. Does not use `CardButton` because that brings interaction the cluster doesn't want.
+- **Launcher button.** First child of the center cluster, in its own Item with its own hover MouseArea (the cluster has no wrapping hover handler — each segment is independent). Renders the distro logo via a **Nerd Font glyph** rather than an icon-theme path: `bar.osLogoGlyph` is a switch on `shellRoot.osId` (read once from `/etc/os-release`'s `ID`) returning the matching codepoint from Nerd Fonts' Linux distro range (U+F300–U+F33F). Falls back to the generic Linux/Tux glyph for unmapped distros. Rendered as a plain `Text` element using `bar.fontFamily` (already a Nerd Font) tinted `cFg` / `cPrimary` on hover. Avoid icon-theme paths here — the typical `distributor-logo-<id>` icons in Colloid/Adwaita are full-color app-style logos that don't match the bar's monochrome aesthetic, and the symbolic `*-uptodate-symbolic` variants are checkmarks (designed for "system up to date" tray indicators, not as logos).
+
+  Hover → `bar.launcherEnter` → `shellRoot.launcherEnter(screen)`; the launcher's own panel-hover routes back through the same counter so cursor handoff from icon to panel keeps it open. Hover-leave starts a 250 ms close timer. IPC `qs ipc call launcher show|hide|toggle` still works for keyboard binds.
 - **Status filtering / NeedsAttention.** Per the SNI spec, hosts only render `Active` and `NeedsAttention` items; `Passive` items are filtered from the Repeater model. NeedsAttention items get a small `cPrimary` dot below the icon with a slow-pulse opacity animation, matching the "look at this" semantic.
 - **Tray menu rendering** (`TrayMenuContent.qml`):
   - **Cascade layout.** The root menu is the rightmost column; hovering a parent entry for ~300 ms opens its children as a new column to the left (`menuPath` array, `Row { layoutDirection: RightToLeft }`). The cursor can travel between columns through a 6 px gap without closing — they're all inside the same popout's input mask.
@@ -219,6 +224,18 @@ The Popouts wrapper exposes IPC for the power menu:
 - Modal promotes inverse corners to flush when `H < invRadius`. At the 8 px peek the elliptical inverse arc squashes into a near-flat stub that reads as a stray curl rather than a corner; flat-bottom looks intentional. Transition happens late in the collapse animation so the snap is almost invisible.
 - Hover detection comes from **two sources** combined via a counter (`_hoverSources` in `ThemeSwitcher.qml`, mirrors `shellRoot._hoverDepth`): Modal's own root-level `HoverHandler` and an `EdgeBumper` at the screen bottom. See "Adding a non-bar edge modal" below for the reusable pattern.
 
+#### Workspaces overview (thumbnail popout)
+
+Hover-driven Modal (top edge, centered) that drops below the workspace cluster. Reuses the standard `popoutEnter`/`popoutLeave` machinery under the name `"workspaces"`, including owner-screen scoping for multi-monitor.
+
+Thumbnails are cached PNGs captured by `grim`:
+
+- **Cache dir:** `$XDG_RUNTIME_DIR/quickshell/workspace-thumbs/<id>.png`. Wiped on reboot — no stale-from-last-session screenshots.
+- **Capture trigger:** every workspace focus change (after a 300 ms settle so the switch animation is done) plus a 5 s periodic timer for the active workspace, so thumbs stay fresh while the overview sits open.
+- **Atomic write:** `grim` writes to `<id>.png.tmp` and the shell renames it to `<id>.png` on success. Without this, `Image` readers can pick up half-written files and log "Unable to read image data".
+- **Cache busting in QML:** `Image.cache: false` alone isn't enough — when the source URL string is unchanged, QML doesn't re-read. `shellRoot._workspaceThumbVersion` is incremented after every successful capture; `WorkspacesContent`'s per-card `Connections { onThumbVersionChanged }` resets `Image.source` to "" then to the path so it re-reads from disk. Don't try `?v=N` query strings on `file://` URLs — QML treats the entire URL as the literal filename.
+- **Multi-monitor:** captures only the focused workspace's monitor (`Hyprland.focusedWorkspace.monitor.name` → `grim -o`). Each workspace is bound to one monitor in Hyprland, so this is correct.
+
 #### Adding a non-bar edge modal
 
 For a Modal anchored to a screen edge (top or bottom) that hover-triggers from cursor proximity to that edge, you need an `EdgeBumper` because Wayland sends a pointer-leave when the cursor lands on the very last pixel row of a surface — closing the modal mid-open. The bumper bleeds 1 px past the edge on its own invisible surface so the visible modal stays fully on-screen.
@@ -262,6 +279,19 @@ Tint is mandatory and should be `cFg` for body icons, `cPrimary` for accent/stat
 ### Hover hit-boxes
 
 Bar icons (volume, bell, power, clock) use a `MouseArea` with negative `anchors.topMargin` / `bottomMargin` so the hit-box fills the full bar height while the visible icon stays its natural size. Pattern: `anchors.topMargin: -(bar.barHeight - icon.height) / 2`.
+
+### Bar icons trigger their popouts on hover, not click
+
+Every icon in the bar that has an associated popout/window opens it **on hover**, not on click. This includes volume, notifications (bell), calendar (clock), power, tray icons, the launcher logo, and the workspaces cluster. Click is reserved for stateful in-place toggles (the bell click toggles `notifMuted`, the volume mute icon click toggles audio mute) — *not* for opening windows.
+
+Hover-triggered popouts use one of two state machines:
+
+- **Bar popouts** (volume / notifications / calendar / power / tray / workspaces): route through `shellRoot.popoutEnter(name, screen)` / `popoutLeave()`. Single global `_hoverDepth` counter, single 250 ms close timer, single `popoutCurrent` + `popoutOwner` derivation. Wrapper window is `Popouts.qml` (or a dedicated Modal for centered ones like `workspaces`).
+- **Standalone modals that mimic popout-style hover** (launcher, ThemeSwitcher): each has its own state (`launcherOpen`, ThemeSwitcher's local `hovered`), its own `_launcherHoverDepth`-style counter, and its own close timer — but the *shape* of the state machine (counter increments on every enter, decrements on every leave, close timer fires only at zero) is the same as the bar popouts. AppLauncher's `panelEnter`/`panelLeave` signals route into the same counter so the cursor can hand off from the bar icon to the panel without dropping below zero.
+
+  **AppLauncher has dual open modes via `_launcherHoverManaged`:** when opened by hover, the flag is true and hover-leave closes via the 250 ms timer (same as any other popout). When opened by IPC / click (`launcherShow`, `launcherToggle`), the flag is false and hover events are ignored — the launcher stays open until `requestClose` / `launcherHide` / `launcherToggle` flips it. This way a keybind-summoned launcher doesn't close just because you moved the cursor off it, but a hover-summoned one closes naturally when you wander away. Hover entering an already-open IPC-launcher does NOT switch modes — the flag is only set when hover *opens* a closed launcher.
+
+When adding a new bar icon with a popout, follow the bar-popout path (hover-driven, name-keyed, owner-aware). Don't introduce a click-to-open icon — it'll feel inconsistent with everything else.
 
 ### Modals are stateless containers; state lives in shell.qml
 

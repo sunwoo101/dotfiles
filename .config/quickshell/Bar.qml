@@ -28,15 +28,52 @@ PanelWindow {
     required property bool   powerOpen
     required property bool   volumeOpen
     required property bool   calendarOpen
+    required property string osId
+    required property bool   launcherOpen
+    required property bool   workspacesOpen
 
-    // Single popout-name signal — Bar fires this when the cursor enters
-    // an icon's hover area; shellRoot dispatches into popoutEnter(name).
-    // popoutLeave fires when the cursor leaves the entire bar.
+    // Hover signals — Bar fires both with the name of whichever icon's
+    // MouseArea fired (e.g. "volume", "workspaces", "launcher", "tray:0").
+    // shell.qml dispatches by name into the popout system (left/right
+    // tray/etc.) or the center system (launcher / workspaces overview).
     signal popoutEnter(string name)
-    signal popoutLeave()
+    signal popoutLeave(string name)
     // Click on the bell icon — shellRoot toggles `notifMuted`. Hover still
     // opens the notifications popout.
     signal notifMuteToggle()
+
+    // OS-logo glyph from Nerd Fonts' Linux distro icon set (codepoints
+    // U+F300–U+F33F). The shell already uses JetBrainsMono Nerd Font, so
+    // these glyphs render natively as a Text element — tintable via color
+    // and consistent stroke weight with the rest of the bar.
+    // Fallback to the generic Linux/Tux glyph (FontAwesome U+F17C) for
+    // distros not in this map.
+    readonly property string osLogoGlyph: {
+        switch (osId) {
+            case "arch":
+            case "archlinux":   return "";
+            case "ubuntu":      return "";
+            case "fedora":      return "";
+            case "debian":      return "";
+            case "manjaro":     return "";
+            case "nixos":       return "";
+            case "pop":
+            case "pop_os":
+            case "popos":       return "";
+            case "linuxmint":   return "";
+            case "gentoo":      return "";
+            case "alpine":      return "";
+            case "kali":        return "";
+            case "opensuse":
+            case "opensuse-tumbleweed":
+            case "opensuse-leap": return "";
+            case "void":        return "";
+            case "endeavouros": return "";
+            case "raspbian":    return "";
+            case "elementary":  return "";
+            default:            return "";   // generic Tux
+        }
+    }
 
     // Screen-relative anchor X positions, used by Popouts.qml.
     // Right-side popouts pin their right edge here:
@@ -53,6 +90,9 @@ PanelWindow {
     readonly property real clockLeftX:
         leftSection.x + clock.x
     readonly property real powerLeftX: 0   // power menu hangs from screen left
+    // Center-anchor for the workspaces overview popout (cluster's center X).
+    readonly property real workspacesCenterX:
+        wsCluster.x + wsCluster.width / 2
 
     screen: modelData
 
@@ -156,7 +196,7 @@ PanelWindow {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onEntered: bar.popoutEnter("power")
-                onExited:  bar.popoutLeave()
+                onExited:  bar.popoutLeave("power")
             }
         }
 
@@ -188,7 +228,7 @@ PanelWindow {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onEntered: bar.popoutEnter("calendar")
-                onExited:  bar.popoutLeave()
+                onExited:  bar.popoutLeave("calendar")
             }
         }
 
@@ -203,45 +243,120 @@ PanelWindow {
     }
     }   // /leftSection
 
-    // CENTER — workspaces with windows + active (Hyprland-driven, not 1..10)
-    RowLayout {
+    // CENTER — launcher logo + workspace pills, sharing a centered Row
+    // but each segment owns its own hover MouseArea so they trigger
+    // independent popouts. No wrapping hover handler — that would open
+    // the workspaces overview when hovering the launcher.
+    Item {
+        id: wsCluster
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: barBg.verticalCenter
-        spacing: 6
+        implicitWidth:  centerRow.implicitWidth
+        implicitHeight: centerRow.implicitHeight
 
-        Repeater {
-            // Hyprland.workspaces.values is the list of workspaces that exist —
-            // i.e. ones with windows OR the active one. Always sorted by id.
-            model: Hyprland.workspaces.values
+        Row {
+            id: centerRow
+            anchors.fill: parent
+            spacing: 8
 
-            CardButton {
-                id: wsBtn
-                required property var modelData
-                readonly property int wsId: modelData.id
-                active: Hyprland.focusedWorkspace
-                    && Hyprland.focusedWorkspace.id === wsId
-
-                cFg: bar.cFg
-                cPrimary: bar.cPrimary
-                radius: height / 2
-                implicitWidth: active ? 48 : 24
-                implicitHeight: 24
-
-                Behavior on implicitWidth {
-                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
-                }
-
-                onClicked: Hyprland.dispatch("workspace " + wsBtn.wsId)
+            // Launcher icon — hover opens the app launcher (matches every
+            // other bar icon's hover-to-open behavior).
+            Item {
+                id: launcherBtn
+                width:  26
+                height: 26
+                anchors.verticalCenter: parent.verticalCenter
 
                 Text {
                     anchors.centerIn: parent
-                    text: wsBtn.wsId
-                    color: bar.cFg
-                    opacity: wsBtn.active ? 1 : 0.2
-                    font.pixelSize: 15
+                    text: bar.osLogoGlyph
                     font.family: bar.fontFamily
-                    font.bold: true
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    font.pixelSize: 20
+                    color: (launcherMa.containsMouse || bar.launcherOpen)
+                        ? bar.cPrimary : bar.cFg
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+
+                MouseArea {
+                    id: launcherMa
+                    anchors.fill: parent
+                    anchors.topMargin: -(bar.barHeight - 26) / 2
+                    anchors.bottomMargin: -(bar.barHeight - 26) / 2
+                    anchors.leftMargin: -6
+                    anchors.rightMargin: -6
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: bar.popoutEnter("launcher")
+                    onExited:  bar.popoutLeave("launcher")
+                }
+            }
+
+            // Workspace pills — own hover MouseArea opens the workspaces
+            // overview popout. Pills are non-interactive visual indicators.
+            Item {
+                id: wsArea
+                width:  wsRow.implicitWidth
+                height: wsRow.implicitHeight
+                anchors.verticalCenter: parent.verticalCenter
+
+                RowLayout {
+                    id: wsRow
+                    anchors.fill: parent
+                    spacing: 6
+
+                    Repeater {
+                        // Hyprland.workspaces.values is the list of workspaces
+                        // that exist — i.e. ones with windows OR the active one.
+                        model: Hyprland.workspaces.values
+
+                        Rectangle {
+                            id: wsPill
+                            required property var modelData
+                            readonly property int wsId: modelData.id
+                            readonly property bool active: Hyprland.focusedWorkspace
+                                && Hyprland.focusedWorkspace.id === wsId
+
+                            Layout.preferredWidth: active ? 44 : 22
+                            Layout.preferredHeight: 22
+                            radius: height / 2
+                            color: active
+                                ? Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.18)
+                                : Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.06)
+                            border.color: active
+                                ? bar.cPrimary
+                                : Qt.rgba(bar.cFg.r, bar.cFg.g, bar.cFg.b, 0.10)
+                            border.width: 1
+
+                            Behavior on Layout.preferredWidth {
+                                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                            }
+                            Behavior on color        { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: wsPill.wsId
+                                color: bar.cFg
+                                opacity: wsPill.active ? 1 : 0.2
+                                font.pixelSize: 15
+                                font.family: bar.fontFamily
+                                font.bold: true
+                                Behavior on opacity { NumberAnimation { duration: 120 } }
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.topMargin: -(bar.barHeight - wsRow.implicitHeight) / 2
+                    anchors.bottomMargin: -(bar.barHeight - wsRow.implicitHeight) / 2
+                    anchors.leftMargin: -6
+                    anchors.rightMargin: -6
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: bar.popoutEnter("workspaces")
+                    onExited:  bar.popoutLeave("workspaces")
                 }
             }
         }
@@ -285,7 +400,7 @@ PanelWindow {
                     id: trayItem
                     required property var modelData
                     required property int index
-                    readonly property int iconSize: 18
+                    readonly property int iconSize: 20
                     readonly property bool needsAttention:
                         modelData.status === Status.NeedsAttention
                     implicitWidth:  iconSize
@@ -342,7 +457,7 @@ PanelWindow {
                                 + trayItem.x + trayItem.width;
                             bar.popoutEnter("tray:" + trayItem.index);
                         }
-                        onExited: bar.popoutLeave()
+                        onExited: bar.popoutLeave("tray:" + trayItem.index)
                         onClicked: (mouse) => {
                             var item = trayItem.modelData;
                             if (mouse.button === Qt.MiddleButton) {
@@ -397,8 +512,9 @@ PanelWindow {
                 anchors.leftMargin: -8
                 anchors.rightMargin: -8
                 hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
                 onEntered: bar.popoutEnter("volume")
-                onExited:  bar.popoutLeave()
+                onExited:  bar.popoutLeave("volume")
             }
         }
 
@@ -472,7 +588,7 @@ PanelWindow {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onEntered: bar.popoutEnter("notifications")
-                onExited:  bar.popoutLeave()
+                onExited:  bar.popoutLeave("notifications")
                 onClicked: bar.notifMuteToggle()
             }
         }

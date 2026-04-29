@@ -167,11 +167,16 @@ PanelWindow {
         onClicked: root.requestClose()
     }
 
-    // Root-level hover tracker — covers the input mask region. Keeping it
-    // outside `panel` (which has clip:true) avoids edge-flake hover misses
-    // near the surface boundary; same pattern Popouts uses.
+    // Hover tracker scoped to the visible panel. Keeping it on `panel`
+    // (rather than root) matters in fullscreen mode (`closeOnOutsideClick`):
+    // the surface fills the entire screen, so a root-level hover would
+    // fire as soon as the cursor entered the surface — i.e. anywhere on
+    // screen — and panelLeave would never fire when moving to the desktop.
+    // Edge-deadzone hover (ThemeSwitcher) is handled separately by
+    // EdgeBumper, so panel-level hover is safe everywhere.
     HoverHandler {
-        id: rootHover
+        id: panelHover
+        parent: panel
         onHoveredChanged: hovered ? root.panelEnter() : root.panelLeave()
     }
 
@@ -191,8 +196,13 @@ PanelWindow {
         width:  root.panelTotalWidth
         // Inner visible panel height — independent of the PanelWindow's
         // surface height. Always animated so ThemeSwitcher (with constant
-        // surfaceHeight) collapses smoothly inside a fixed-size surface.
+        // surfaceHeight) collapses smoothly inside a fixed-size surface
+        // and CenterPopouts can morph between launcher (640) and
+        // workspaces (~1160) widths.
         height: root.open ? root.contentHeight : 0
+        Behavior on width {
+            NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+        }
         Behavior on height {
             NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
         }

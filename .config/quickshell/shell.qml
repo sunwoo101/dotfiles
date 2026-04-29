@@ -238,6 +238,69 @@ ShellRoot {
         stdout: StdioCollector { onStreamFinished: shellRoot.btConnected = text.includes("Device") }
     }
 
+    // -- workspace thumbnails --------------------------------------------
+    // Cached PNGs per workspace id, used by the workspaces overview popout.
+    // Stored under XDG_RUNTIME_DIR so the cache is wiped on reboot — no
+    // stale-screenshot-from-last-session problem. Captured on every focus
+    // change (after a 300 ms settle so the switch animation is done) AND
+    // every 5 s while idle on a workspace, so the active thumb stays fresh
+    // while the overview sits open.
+    readonly property string _workspaceThumbDir:
+        Quickshell.env("XDG_RUNTIME_DIR") + "/quickshell/workspace-thumbs"
+    function workspaceThumbPath(wsId) {
+        return _workspaceThumbDir + "/" + wsId + ".png";
+    }
+    // Bumped after every successful capture so QML Image re-fetches the
+    // file even when the path string hasn't changed (Image caches by URL).
+    property int _workspaceThumbVersion: 0
+
+    Process {
+        id: _workspaceThumbInit
+        running: true
+        command: ["sh", "-c", "mkdir -p '" + shellRoot._workspaceThumbDir + "'"]
+    }
+    Process {
+        id: _workspaceThumbCapture
+        running: false
+        onExited: shellRoot._workspaceThumbVersion += 1
+    }
+    function captureCurrentWorkspace() {
+        var ws = Hyprland.focusedWorkspace;
+        if (!ws || !ws.monitor || !ws.monitor.name) return;
+        if (_workspaceThumbCapture.running) return;
+        var path = workspaceThumbPath(ws.id);
+        // Write to .tmp then atomically rename so Image readers never see
+        // a half-written PNG.
+        _workspaceThumbCapture.command = [
+            "sh", "-c",
+            "grim -s 0.5 -o '" + ws.monitor.name + "' '" + path + ".tmp' "
+                + "&& mv '" + path + ".tmp' '" + path + "'"
+        ];
+        _workspaceThumbCapture.running = true;
+    }
+    Connections {
+        target: Hyprland
+        function onFocusedWorkspaceChanged() { _workspaceThumbDelay.restart(); }
+    }
+    Timer {
+        id: _workspaceThumbDelay
+        interval: 300
+        onTriggered: shellRoot.captureCurrentWorkspace()
+    }
+    Timer {
+        interval: 5000
+        running: true; repeat: true
+        onTriggered: shellRoot.captureCurrentWorkspace()
+    }
+
+    // -- OS id (for the launcher button's distro logo) ------------------
+    property string osId: ""
+    Process {
+        running: true
+        command: ["sh", "-c", ". /etc/os-release && printf '%s' \"$ID\""]
+        stdout: StdioCollector { onStreamFinished: shellRoot.osId = text.trim() }
+    }
+
     // -- focused monitor (Hyprland) --------------------------------------
     // For IPC-driven and notification-driven actions where there's no bar
     // hover to anchor to, we open on the currently-focused monitor only.
@@ -380,23 +443,72 @@ ShellRoot {
         }
     }
 
-    // -- app launcher state + IPC ----------------------------------------
-    // trigger from hyprland: `qs ipc call launcher toggle`
-    // launcherOwner pins the launcher to one screen (the focused monitor
-    // at trigger time) so it doesn't open on every output simultaneously.
-    property bool launcherOpen: false
-    property string launcherOwner: ""
-    function launcherShow() {
-        launcherOwner = focusedScreen;
-        launcherOpen = true;
+    // -- center popouts (launcher + workspaces overview) -----------------
+    // Both center-anchored popouts share a single Modal wrapper
+    // (CenterPopouts) so they morph between each other the same way the
+    // left/right Popouts wrapper morphs volume → notifications. Single
+    // hover-depth counter, single close timer, single owner — switching
+    // between launcher and workspaces mid-hover is just a `centerCurrent`
+    // change, not a separate close-then-open.
+    //
+    // Dual-mode: when opened by hover (centerEnter), the launcher closes
+    // on hover-leave like every other popout. When opened by IPC
+    // (centerShow → e.g. launcher keybind), `_centerHoverManaged` is
+    // false and hover events are ignored — stays open until centerHide.
+    property string centerCurrent: ""
+    property string centerOwner: ""
+    property int _centerHoverDepth: 0
+    property bool _centerHoverManaged: false
+    Timer {
+        id: centerCloseTimer
+        interval: 250
+        onTriggered: shellRoot.centerHide()
     }
-    function launcherHide() {
-        launcherOpen = false;
-        launcherOwner = "";
+    function centerEnter(name, screen) {
+        if (centerCurrent === "") {
+            // Opening from closed — hover is in charge of the lifecycle.
+            _centerHoverManaged = true;
+        }
+        if (!_centerHoverManaged) {
+            // IPC-managed launcher: keep open, but allow morphing into
+            // workspaces if the user actively hovers it.
+            if (name !== centerCurrent) {
+                centerCurrent = name;
+                centerOwner = screen;
+            }
+            return;
+        }
+        _centerHoverDepth += 1;
+        centerCloseTimer.stop();
+        centerCurrent = name;
+        centerOwner = screen;
     }
+    function centerLeave() {
+        if (!_centerHoverManaged) return;
+        _centerHoverDepth = Math.max(0, _centerHoverDepth - 1);
+        if (_centerHoverDepth === 0) centerCloseTimer.restart();
+    }
+    function centerShow(name) {
+        _centerHoverManaged = false;
+        _centerHoverDepth = 0;
+        centerCloseTimer.stop();
+        centerOwner = focusedScreen;
+        centerCurrent = name;
+    }
+    function centerHide() {
+        centerCurrent = "";
+        centerOwner = "";
+        _centerHoverDepth = 0;
+        _centerHoverManaged = false;
+        centerCloseTimer.stop();
+    }
+    // Shorthands for the launcher IPC handler — preserves the existing
+    // qs ipc surface (`launcher show|hide|toggle`).
+    function launcherShow()   { centerShow("launcher"); }
+    function launcherHide()   { centerHide(); }
     function launcherToggle() {
-        if (launcherOpen) launcherHide();
-        else launcherShow();
+        if (centerCurrent === "launcher") centerHide();
+        else centerShow("launcher");
     }
 
     IpcHandler {
@@ -495,8 +607,23 @@ ShellRoot {
             powerOpen:    shellRoot.powerOpen
             volumeOpen:   shellRoot.volumeOpen
             calendarOpen: shellRoot.calendarOpen
-            onPopoutEnter: (name) => shellRoot.popoutEnter(name, modelData.name)
-            onPopoutLeave: shellRoot.popoutLeave()
+            osId:         shellRoot.osId
+            launcherOpen: (shellRoot.centerCurrent === "launcher" && shellRoot.centerOwner === modelData.name)
+            workspacesOpen: (shellRoot.centerCurrent === "workspaces" && shellRoot.centerOwner === modelData.name)
+            onPopoutEnter: (name) => {
+                if (name === "launcher" || name === "workspaces") {
+                    shellRoot.centerEnter(name, modelData.name);
+                } else {
+                    shellRoot.popoutEnter(name, modelData.name);
+                }
+            }
+            onPopoutLeave: (name) => {
+                if (name === "launcher" || name === "workspaces") {
+                    shellRoot.centerLeave();
+                } else {
+                    shellRoot.popoutLeave();
+                }
+            }
             onNotifMuteToggle: shellRoot.toggleNotifMute()
             onVolumeRightXChanged:   shellRoot._setBarAnchor(modelData.name, bar)
             onBellRightXChanged:     shellRoot._setBarAnchor(modelData.name, bar)
@@ -622,19 +749,31 @@ ShellRoot {
     }
 
 
+    // Center popouts wrapper — hosts the AppLauncher and workspaces
+    // overview as crossfading Loaders so they morph between each other
+    // (same pattern as Popouts.qml does for left/right side popouts).
     Variants {
         model: _screensWhenReady
-        AppLauncher {
+        CenterPopouts {
             modelData: modelData
             cBg: shellRoot.cBg
             cFg: shellRoot.cFg
             cPrimary: shellRoot.cPrimary
             cMuted: shellRoot.cMuted
             fontFamily: shellRoot.fontFamily
-            open: shellRoot.launcherOpen && shellRoot.launcherOwner === modelData.name
-            onRequestClose: shellRoot.launcherHide()
+            current: shellRoot.centerOwner === modelData.name
+                ? shellRoot.centerCurrent
+                : ""
+            ipcManaged: !shellRoot._centerHoverManaged
+            thumbDir: shellRoot._workspaceThumbDir
+            thumbVersion: shellRoot._workspaceThumbVersion
+            // Hover handoff: cursor on the panel keeps the same depth
+            // counter the bar icons increment, so crossing icon → panel
+            // never drops to zero.
+            onPanelEnter: shellRoot.centerEnter(shellRoot.centerCurrent || "launcher", modelData.name)
+            onPanelLeave: shellRoot.centerLeave()
+            onRequestClose: shellRoot.centerHide()
         }
     }
-
 
 }
