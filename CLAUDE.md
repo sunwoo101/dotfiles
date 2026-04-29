@@ -396,9 +396,9 @@ dotfiles/
 ├── packages/{pacman,aur}       # `- pkgname` per line
 ├── scripts/                    # one concern each, independently runnable
 │   ├── configure_pacman.sh      # pacman.conf edits: enable [multilib];
-│   │                            #   NoExtract + pacman hook moves
-│   │                            #   hyprland.desktop → applications/ so
-│   │                            #   uwsm finds it but SDDM doesn't list it
+│   │                            #   points SDDM SessionDir at a custom dir
+│   │                            #   with only hyprland-uwsm.desktop so the
+│   │                            #   plain hyprland.desktop is not listed
 │   ├── install_pacman_packages.sh
 │   ├── install_yay.sh
 │   ├── install_aur_packages.sh  # --skippgpcheck so AUR keys don't prompt

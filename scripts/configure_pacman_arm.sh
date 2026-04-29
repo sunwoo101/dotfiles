@@ -3,94 +3,51 @@ set -euo pipefail
 
 # ARM: Arch Linux ARM has no [multilib] repo — skip that step entirely.
 #
-# Hides hyprland.desktop from SDDM without removing it:
-#   - NoExtract stops pacman writing it to wayland-sessions/ (SDDM scan path)
-#   - A pacman hook extracts it from the package cache to applications/
-#     (uwsm also searches there, so session launch still works)
-#   - Migration: cleans up any state left by prior approaches
+# Hide hyprland.desktop from SDDM by pointing SDDM at a custom session dir
+# (/usr/local/share/wayland-sessions/) that only contains hyprland-uwsm.desktop.
+# hyprland.desktop stays in /usr/share/wayland-sessions/ where uwsm finds it.
+# No file patching, no pacman hooks, no package cache extraction.
 
 CONF=/etc/pacman.conf
-WAYLAND_TARGET=/usr/share/wayland-sessions/hyprland.desktop
-LOCAL_TARGET=/usr/local/share/wayland-sessions/hyprland.desktop
-SYNC_SCRIPT=/usr/local/lib/hyprland-desktop-sync.sh
-HOOK_DIR=/etc/pacman.d/hooks
-HOOK="$HOOK_DIR/hyprland-desktop-sync.hook"
+SESSION_DIR=/usr/local/share/wayland-sessions
+SDDM_CONF=/etc/sddm.conf.d/sessions.conf
 
 # ---- migrate stale state from prior script versions ----------------------
-if grep -q '^Hidden=true' "$WAYLAND_TARGET" 2>/dev/null; then
-    echo "removing stale Hidden=true from $WAYLAND_TARGET"
-    sudo sed -i '/^Hidden=true$/d' "$WAYLAND_TARGET"
+# Remove stale NoExtract directive and restore hyprland.desktop if deleted.
+sudo sed -i '/^NoExtract.*hyprland\.desktop/d' "$CONF"
+if [ ! -e /usr/share/wayland-sessions/hyprland.desktop ]; then
+    echo "restoring missing hyprland.desktop (reinstalling hyprland)"
+    sudo pacman -S --noconfirm --overwrite "*" hyprland
 fi
-STALE_HOOK="$HOOK_DIR/hide-hyprland-session.hook"
-if [ -f "$STALE_HOOK" ]; then
-    echo "removing stale hook: $STALE_HOOK"
-    sudo rm "$STALE_HOOK"
+# Remove stale pacman hooks and sync script.
+for f in \
+    /etc/pacman.d/hooks/hide-hyprland-session.hook \
+    /etc/pacman.d/hooks/hyprland-desktop-sync.hook \
+    /usr/local/lib/hyprland-desktop-sync.sh
+do
+    [ -f "$f" ] && sudo rm "$f" && echo "removed stale: $f"
+done
+# Remove the misplaced hyprland.desktop we wrote to the wrong location.
+[ -f "$SESSION_DIR/hyprland.desktop" ] && sudo rm "$SESSION_DIR/hyprland.desktop"
+
+# ---- custom SDDM session dir ---------------------------------------------
+# SDDM reads sessions only from its configured SessionDir. By pointing it here
+# and symlinking only hyprland-uwsm.desktop, hyprland.desktop stays invisible
+# to the greeter while remaining available to uwsm in /usr/share/wayland-sessions/.
+sudo mkdir -p "$SESSION_DIR"
+if [ ! -L "$SESSION_DIR/hyprland-uwsm.desktop" ]; then
+    sudo ln -sf /usr/share/wayland-sessions/hyprland-uwsm.desktop \
+        "$SESSION_DIR/hyprland-uwsm.desktop"
+    echo "linked hyprland-uwsm.desktop → $SESSION_DIR/"
 fi
 
-# ---- NoExtract: keep hyprland.desktop out of SDDM's scan path -----------
-NOEXTRACT='NoExtract = usr/share/wayland-sessions/hyprland.desktop'
-if grep -Fxq "$NOEXTRACT" "$CONF"; then
-    echo "NoExtract for hyprland.desktop already set"
+sudo mkdir -p /etc/sddm.conf.d
+if [ ! -f "$SDDM_CONF" ]; then
+    echo "writing SDDM session dir config: $SDDM_CONF"
+    sudo tee "$SDDM_CONF" >/dev/null <<CONF
+[Wayland]
+SessionDir=$SESSION_DIR
+CONF
 else
-    echo "adding NoExtract for hyprland.desktop to $CONF"
-    sudo sed -i "/^\[options\]/a $NOEXTRACT" "$CONF"
-fi
-
-# ---- sync script ---------------------------------------------------------
-sudo mkdir -p /usr/local/lib
-sudo tee "$SYNC_SCRIPT" >/dev/null <<'SCRIPT'
-#!/usr/bin/env bash
-set -euo pipefail
-# Extracts hyprland.desktop from the pacman package cache into
-# /usr/local/share/wayland-sessions/ — uwsm searches all XDG_DATA_DIRS/wayland-sessions/
-# so it finds the file there, but SDDM's SessionDir only covers /usr/share/wayland-sessions/.
-find_pkg() {
-    find /var/cache/pacman/pkg -name 'hyprland-[0-9]*.pkg.tar.*' -not -name '*.sig' \
-        | sort -V | tail -1
-}
-pkg=$(find_pkg)
-if [ -z "$pkg" ]; then
-    echo "hyprland not in pacman cache, downloading..."
-    pacman -Sw --noconfirm hyprland
-    pkg=$(find_pkg)
-fi
-if [ -z "$pkg" ]; then
-    echo "ERROR: could not find or download hyprland package" >&2
-    exit 1
-fi
-mkdir -p /usr/local/share/wayland-sessions
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-bsdtar -xOf "$pkg" usr/share/wayland-sessions/hyprland.desktop > "$tmp"
-mv "$tmp" /usr/local/share/wayland-sessions/hyprland.desktop
-echo "synced hyprland.desktop → /usr/local/share/wayland-sessions/"
-SCRIPT
-sudo chmod +x "$SYNC_SCRIPT"
-
-# ---- pacman hook: re-sync after hyprland install/upgrade -----------------
-sudo mkdir -p "$HOOK_DIR"
-if [ ! -f "$HOOK" ]; then
-    echo "installing pacman hook: $HOOK"
-    sudo tee "$HOOK" >/dev/null <<HOOK
-[Trigger]
-Type = Package
-Operation = Install
-Operation = Upgrade
-Target = hyprland
-
-[Action]
-Description = Syncing Hyprland desktop entry to applications/ (out of SDDM scan path)...
-When = PostTransaction
-Exec = $SYNC_SCRIPT
-HOOK
-else
-    echo "pacman hook already present"
-fi
-
-# ---- initial sync + remove from wayland-sessions/ ------------------------
-echo "running initial desktop entry sync"
-sudo "$SYNC_SCRIPT"
-if [ -e "$WAYLAND_TARGET" ]; then
-    echo "removing $WAYLAND_TARGET from SDDM scan path"
-    sudo rm "$WAYLAND_TARGET"
+    echo "SDDM session config already present"
 fi
