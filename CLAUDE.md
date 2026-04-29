@@ -78,6 +78,8 @@ Multi-file structure. `shell.qml` holds shared state; per-screen panels live in 
 │                               #   per-group chevron + per-notif age (e.g. "5m")
 ├── CalendarContent.qml         # month grid, prev/next nav, today highlighted
 ├── PowerMenuContent.qml        # lock/hibernate/logout/reboot/shutdown
+├── TrayMenuContent.qml         # SystemTrayItem menu rendered inline (via QsMenuOpener)
+│                               #   so tray menus get the same hover/morph as volume etc.
 ├── AppLauncher.qml             # centered top-anchored Modal (closeOnOutsideClick)
 ├── ThemeSwitcher.qml           # bottom centered Modal — accent grid, dark/light, reset
 ├── EdgeBumper.qml              # reusable invisible hover trigger anchored to a screen
@@ -90,6 +92,13 @@ Multi-file structure. `shell.qml` holds shared state; per-screen panels live in 
 ```
 
 **State stays in `shell.qml`** — colors loading (FileView × 2), `cBg`/`cFg`/`cPrimary`/etc., theme state (`currentAccent`, `currentFlavor`), action functions (`setAccent`, `toggleFlavor`, `clearOverride`), system polling (`volumeText`, `batteryText`, `btConnected`). Children declare `required property` for what they need; `shell.qml` passes them via the Variants delegate.
+
+**Per-screen ownership for popouts/launcher.** Every modal-style PanelWindow is instantiated per-monitor via `Variants`. Without scoping, hover/IPC state opens on every monitor at once. Each Variants block filters on an *owner screen name*:
+- **Popouts**: `current: shellRoot.popoutOwner === modelData.name ? shellRoot.popoutCurrent : ""`. `popoutOwner` is set on `popoutEnter(name, screen)` (bar passes `modelData.name`) or `popoutShow(name)` (IPC; uses `focusedScreen`). For auto-popped notifications, owner falls back to `focusedScreen`.
+- **AppLauncher**: `open: launcherOpen && launcherOwner === modelData.name`. `launcherOwner` is captured from `focusedScreen` on `launcherShow()`.
+- **ThemeSwitcher**: each screen has its own EdgeBumper, so hover is naturally local — no owner gating needed.
+
+`focusedScreen` is `Hyprland.focusedWorkspace.monitor.name`. Bars on every monitor remain visible and trigger their own monitor's popouts; IPC and notifications open on the focused one only.
 
 **Action callbacks** are passed as arrow-wrapped function properties:
 
@@ -136,7 +145,15 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
 - Inverse corners (Caelestia style) drawn with `Shape` + `PathArc`. Same color as bar.
 - Volume reactive via `Quickshell.Services.Pipewire` (`Pipewire.defaultAudioSink.audio.volume/.muted` with `PwObjectTracker`). Battery + Bluetooth still poll every 2s via `Process` + `StdioCollector`.
 - Bar exposes `volumeRightX` and `bellRightX` (screen-relative X of icon right edges). `shell.qml` collects them into `_barAnchors[screenName]` so the matching `Popouts` panel anchors below the right icon.
-- Right side is wrapped in a `HoverHandler` so the popout stays open while the cursor crosses BETWEEN icons (volume → bluetooth → battery → bell). Per-icon `MouseArea` only fires `onEntered` to set which popout to show; the wrapper's `onHoveredChanged` decides when to close.
+- Right side is wrapped in a `HoverHandler` so the popout stays open while the cursor crosses BETWEEN icons (tray → volume → bluetooth → battery → bell). Per-icon `MouseArea` only fires `onEntered` to set which popout to show; the wrapper's `onHoveredChanged` decides when to close.
+- **System tray** — `Quickshell.Services.SystemTray` items rendered as the left-most cluster on the right side. **Hover** opens the item's menu inline via the shared Popouts wrapper (popout name `tray:<index>`), so tray menus get the same morph + content fade as volume/notifications. Left-click activates, middle-click is `secondaryActivate`, scroll wheel routes to `scroll(delta, false)`. There's no right-click handler — hovering already shows the menu, and switching to another tray icon morphs the popout to its anchor. Tray icons are full-color app icons (not symbolic), so they use a plain `Image` rather than `TintedIcon` — this is the documented exception to the "all glyphs go through TintedIcon" rule.
+- **Status filtering / NeedsAttention.** Per the SNI spec, hosts only render `Active` and `NeedsAttention` items; `Passive` items are filtered from the Repeater model. NeedsAttention items get a small `cPrimary` dot below the icon with a slow-pulse opacity animation, matching the "look at this" semantic.
+- **Tray menu rendering** (`TrayMenuContent.qml`):
+  - **Cascade layout.** The root menu is the rightmost column; hovering a parent entry for ~300 ms opens its children as a new column to the left (`menuPath` array, `Row { layoutDirection: RightToLeft }`). The cursor can travel between columns through a 6 px gap without closing — they're all inside the same popout's input mask.
+  - **Checkable / radio entries** show a checkbox- or radio-symbolic glyph reflecting `buttonType` (None/CheckBox/RadioButton) and `checkState` (Unchecked/PartiallyChecked/Checked). Without this, nm-applet's "Enable Wi-Fi" looks like a stateless action.
+  - **Mnemonic stripping.** GTK menu text often contains `_` markers (`_E` for "press E"); `_stripMnemonic` removes single underscores and collapses `__` → `_`.
+  - **Tooltip header** at the top of the root column shows `tooltipTitle` (and `tooltipDescription` if present) so users see, e.g., the current network SSID without poking at submenus.
+  - **Submenu lazy population** is handled automatically by `QsMenuOpener` — each cascade column has its own opener bound to a different handle, so pushing a column triggers the underlying DBusMenu `AboutToShow` cycle.
 
 ### Popouts wrapper (volume + notifications + calendar + power)
 
@@ -154,6 +171,7 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
   - `notifications` → side right, anchor `root.width` (flush against screen edge).
   - `calendar` → side left, anchor `clockLeftX` (clock's left edge).
   - `power` → side left, anchor `powerLeftX` (currently 0 — flush against screen left edge).
+  - `tray:<index>` → side right, anchor `trayItemRightX` (the hovered tray icon's right edge — Bar updates this on each tray-icon `onEntered`). Single shared `trayLoader` renders whichever item the current `tray:N` resolves to via `SystemTray.items.values[N]`.
 - Corner config adapts to edge state:
   - `_leftAtEdge` (panel's left at x=0) → TL+BL flush.
   - `_rightAtEdge` (panel's right at root.width) → TR+BR flush.
@@ -166,6 +184,10 @@ Bindings on `baseContents` re-evaluate on change. Bindings on `colorsFile.text` 
 `NotificationsContent` groups by `appName`. Single-notif groups render as one card; multi-notif groups render compactly with the latest visible and a chevron — clicking the card or header toggles expand. Group close-X dismisses every notif in that group; in expanded mode each notif also has its own small close-X.
 
 Arrival timestamps live in `shellRoot.notifReceivedAt` (map keyed by `Notification.id`), set in `popNotif` and deleted in the `closed` handler. Bound age labels read from this map plus `shellRoot._notifNow`, which a 30 s `Timer` reassigns to refresh "5m"-style labels without redrawing per-second. Per-app expand state is local to `NotificationsContent.expandedGroups` (map keyed by appName); cleared automatically when the popout content is destroyed via Loader inactive.
+
+#### Notification mute
+
+Click the bell icon to toggle `shellRoot.notifMuted`. While muted, `popNotif` records the timestamp and connects the cleanup-on-close handler as usual but skips the auto-pop strip — incoming notifications are still tracked and visible in the center on hover, just not surfaced as toasts. The bell icon swaps to `notifications-disabled-symbolic` and tints to `cMuted`; the count badge dims to `cMuted` too. Hover still opens the notifications popout independently of mute state.
 
 ### Standalone modals (AppLauncher, ThemeSwitcher)
 

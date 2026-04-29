@@ -7,6 +7,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Services.Notifications
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
@@ -237,15 +238,23 @@ ShellRoot {
         stdout: StdioCollector { onStreamFinished: shellRoot.btConnected = text.includes("Device") }
     }
 
+    // -- focused monitor (Hyprland) --------------------------------------
+    // For IPC-driven and notification-driven actions where there's no bar
+    // hover to anchor to, we open on the currently-focused monitor only.
+    readonly property string focusedScreen:
+        Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.monitor
+            ? Hyprland.focusedWorkspace.monitor.name
+            : ""
+
     // -- unified bar-popout state ----------------------------------------
     // All top-bar drop-downs (volume, notifications, calendar, power)
-    // share one Popouts wrapper that morphs between them. `popoutHover`
-    // is what the user's currently hovering. `popoutCurrent` is what we
-    // actually show — falls back to "notifications" if there are popped
-    // notifs and nothing else is hovered, so they auto-pop without hover.
-    // IPC can also force a name (e.g. `qs ipc call power toggle`).
+    // share one Popouts wrapper per screen. `popoutHover` / `popoutForced`
+    // are global; `_popoutOwner` tracks which screen the popout should
+    // appear on (avoids opening on every monitor in multi-screen setups).
+    // Popouts instances on non-owner screens render `current = ""`.
     property string popoutHover: ""
     property string popoutForced: ""   // set by IPC; cleared on hover
+    property string _popoutOwner: ""
     // Hover-source depth counter: each icon's onEntered / each panel
     // HoverHandler hovered=true increments; the corresponding leave
     // decrements. The close timer only restarts when depth hits 0.
@@ -256,13 +265,18 @@ ShellRoot {
     Timer {
         id: popoutCloseTimer
         interval: 250
-        onTriggered: { shellRoot.popoutHover = ""; shellRoot.popoutForced = ""; }
+        onTriggered: {
+            shellRoot.popoutHover = "";
+            shellRoot.popoutForced = "";
+            shellRoot._popoutOwner = "";
+        }
     }
-    function popoutEnter(name) {
+    function popoutEnter(name, screen) {
         _hoverDepth += 1;
         popoutCloseTimer.stop();
         popoutHover = name;
         popoutForced = "";   // hover overrides IPC
+        _popoutOwner = screen;
     }
     function popoutLeave() {
         _hoverDepth = Math.max(0, _hoverDepth - 1);
@@ -272,10 +286,12 @@ ShellRoot {
         popoutCloseTimer.stop();
         popoutForced = name;
         popoutHover = "";
+        _popoutOwner = focusedScreen;
     }
     function popoutHide() {
         popoutForced = "";
         popoutHover = "";
+        _popoutOwner = "";
         _hoverDepth = 0;
         popoutCloseTimer.stop();
     }
@@ -284,6 +300,14 @@ ShellRoot {
         if (popoutHover) return popoutHover;
         if (popoutForced) return popoutForced;
         if (popped.length > 0) return "notifications";
+        return "";
+    }
+    // Owner of the popout currently showing. For hover/IPC the owner was
+    // captured on enter/show; for auto-popped notifications fall back to
+    // the focused monitor so only one screen lights up.
+    readonly property string popoutOwner: {
+        if (popoutHover || popoutForced) return _popoutOwner;
+        if (popped.length > 0) return focusedScreen;
         return "";
     }
     // Bar reads these for icon highlight when the matching popout is shown.
@@ -310,22 +334,29 @@ ShellRoot {
         onTriggered: shellRoot._notifNow = Date.now()
     }
 
+    // When true, new notifications are still tracked (and visible in the
+    // center via hover) but skip the auto-pop strip. Toggled by clicking
+    // the bell icon in the bar.
+    property bool notifMuted: false
+    function toggleNotifMute() { notifMuted = !notifMuted; }
+
     function popNotif(n) {
         var copy = Object.assign({}, notifReceivedAt);
         copy[n.id] = Date.now();
         notifReceivedAt = copy;
 
-        popped = [...popped, n];
-        // remove from popped the moment the notification closes (e.g. when
-        // a default action invocation causes the sender to close it),
-        // otherwise popped would hold a dangling pointer until the 5s timer
-        // fires — accessing it crashes Quickshell during Repeater regenerate.
+        // cleanup-on-close runs even for muted notifications, so the
+        // received-at map doesn't leak entries.
         n.closed.connect(() => {
             shellRoot.expirePopped(n);
             var c2 = Object.assign({}, shellRoot.notifReceivedAt);
             delete c2[n.id];
             shellRoot.notifReceivedAt = c2;
         });
+
+        if (notifMuted) return;   // don't add to popped or start pop timer
+
+        popped = [...popped, n];
         popTimerComp.createObject(shellRoot, { notif: n });
     }
     function expirePopped(n) { popped = popped.filter(x => x !== n); }
@@ -351,10 +382,22 @@ ShellRoot {
 
     // -- app launcher state + IPC ----------------------------------------
     // trigger from hyprland: `qs ipc call launcher toggle`
+    // launcherOwner pins the launcher to one screen (the focused monitor
+    // at trigger time) so it doesn't open on every output simultaneously.
     property bool launcherOpen: false
-    function launcherShow()   { launcherOpen = true;  }
-    function launcherHide()   { launcherOpen = false; }
-    function launcherToggle() { launcherOpen = !launcherOpen; }
+    property string launcherOwner: ""
+    function launcherShow() {
+        launcherOwner = focusedScreen;
+        launcherOpen = true;
+    }
+    function launcherHide() {
+        launcherOpen = false;
+        launcherOwner = "";
+    }
+    function launcherToggle() {
+        if (launcherOpen) launcherHide();
+        else launcherShow();
+    }
 
     IpcHandler {
         target: "launcher"
@@ -424,10 +467,11 @@ ShellRoot {
     function _setBarAnchor(name, b) {
         var copy = Object.assign({}, _barAnchors);
         copy[name] = {
-            volumeRightX: b.volumeRightX,
-            bellRightX:   b.bellRightX,
-            clockLeftX:   b.clockLeftX,
-            powerLeftX:   b.powerLeftX
+            volumeRightX:    b.volumeRightX,
+            bellRightX:      b.bellRightX,
+            clockLeftX:      b.clockLeftX,
+            powerLeftX:      b.powerLeftX,
+            trayItemRightX:  b.trayItemRightX
         };
         _barAnchors = copy;
     }
@@ -446,16 +490,19 @@ ShellRoot {
             batteryText: shellRoot.batteryText
             btConnected: shellRoot.btConnected
             notifCount: notifSrv.trackedNotifications.values.length
+            notifMuted: shellRoot.notifMuted
             notifOpen:    shellRoot.notifOpen
             powerOpen:    shellRoot.powerOpen
             volumeOpen:   shellRoot.volumeOpen
             calendarOpen: shellRoot.calendarOpen
-            onPopoutEnter: (name) => shellRoot.popoutEnter(name)
+            onPopoutEnter: (name) => shellRoot.popoutEnter(name, modelData.name)
             onPopoutLeave: shellRoot.popoutLeave()
-            onVolumeRightXChanged: shellRoot._setBarAnchor(modelData.name, bar)
-            onBellRightXChanged:   shellRoot._setBarAnchor(modelData.name, bar)
-            onClockLeftXChanged:   shellRoot._setBarAnchor(modelData.name, bar)
-            Component.onCompleted: shellRoot._setBarAnchor(modelData.name, bar)
+            onNotifMuteToggle: shellRoot.toggleNotifMute()
+            onVolumeRightXChanged:   shellRoot._setBarAnchor(modelData.name, bar)
+            onBellRightXChanged:     shellRoot._setBarAnchor(modelData.name, bar)
+            onClockLeftXChanged:     shellRoot._setBarAnchor(modelData.name, bar)
+            onTrayItemRightXChanged: shellRoot._setBarAnchor(modelData.name, bar)
+            Component.onCompleted:   shellRoot._setBarAnchor(modelData.name, bar)
         }
     }
 
@@ -472,7 +519,9 @@ ShellRoot {
             cPrimary: shellRoot.cPrimary
             cMuted: shellRoot.cMuted
             fontFamily: shellRoot.fontFamily
-            current: shellRoot.popoutCurrent
+            // Show only if this screen owns the popout. Other screens
+            // get current="" so their wrapper stays closed.
+            current: shellRoot.popoutOwner === modelData.name ? shellRoot.popoutCurrent : ""
             notifServer: notifSrv
             popped: shellRoot.popped
             notifReceivedAt: shellRoot.notifReceivedAt
@@ -487,7 +536,11 @@ ShellRoot {
                 var a = shellRoot._barAnchors[modelData.name];
                 return a ? a.bellRightX : 0;
             }
-            onPanelEnter:   shellRoot.popoutEnter(shellRoot.popoutCurrent || "notifications")
+            trayItemRightX: {
+                var a = shellRoot._barAnchors[modelData.name];
+                return a ? a.trayItemRightX : 0;
+            }
+            onPanelEnter:   shellRoot.popoutEnter(shellRoot.popoutCurrent || "notifications", modelData.name)
             onPanelLeave:   shellRoot.popoutLeave()
             onRequestClose: shellRoot.popoutHide()
         }
@@ -502,7 +555,7 @@ ShellRoot {
             cPrimary: shellRoot.cPrimary
             cMuted: shellRoot.cMuted
             fontFamily: shellRoot.fontFamily
-            current: shellRoot.popoutCurrent
+            current: shellRoot.popoutOwner === modelData.name ? shellRoot.popoutCurrent : ""
             notifServer: notifSrv
             popped: shellRoot.popped
             notifReceivedAt: shellRoot.notifReceivedAt
@@ -517,7 +570,7 @@ ShellRoot {
                 var a = shellRoot._barAnchors[modelData.name];
                 return a ? a.powerLeftX : 0;
             }
-            onPanelEnter:   shellRoot.popoutEnter(shellRoot.popoutCurrent || "calendar")
+            onPanelEnter:   shellRoot.popoutEnter(shellRoot.popoutCurrent || "calendar", modelData.name)
             onPanelLeave:   shellRoot.popoutLeave()
             onRequestClose: shellRoot.popoutHide()
         }
@@ -578,7 +631,7 @@ ShellRoot {
             cPrimary: shellRoot.cPrimary
             cMuted: shellRoot.cMuted
             fontFamily: shellRoot.fontFamily
-            open: shellRoot.launcherOpen
+            open: shellRoot.launcherOpen && shellRoot.launcherOwner === modelData.name
             onRequestClose: shellRoot.launcherHide()
         }
     }

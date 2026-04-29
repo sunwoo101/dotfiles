@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Services.SystemTray
 
 PanelWindow {
     id: bar
@@ -22,6 +23,7 @@ PanelWindow {
     required property string batteryText
     required property bool   btConnected
     required property int    notifCount
+    required property bool   notifMuted
     required property bool   notifOpen
     required property bool   powerOpen
     required property bool   volumeOpen
@@ -32,6 +34,9 @@ PanelWindow {
     // popoutLeave fires when the cursor leaves the entire bar.
     signal popoutEnter(string name)
     signal popoutLeave()
+    // Click on the bell icon — shellRoot toggles `notifMuted`. Hover still
+    // opens the notifications popout.
+    signal notifMuteToggle()
 
     // Screen-relative anchor X positions, used by Popouts.qml.
     // Right-side popouts pin their right edge here:
@@ -39,6 +44,11 @@ PanelWindow {
         rightSection.x + rightRow.x + volWrap.x + volWrap.width
     readonly property real bellRightX:
         rightSection.x + rightRow.x + bellWrap.x + bellWrap.width
+    // Updated imperatively by the tray icon delegate's onEntered: the
+    // right-edge X (in bar root coords) of whichever tray icon is hovered.
+    // Different popout names ("tray:0", "tray:1", ...) trigger the wrapper's
+    // morph; this anchor gives each its own resting position.
+    property real trayItemRightX: 0
     // Left-side popouts pin their left edge here:
     readonly property real clockLeftX:
         leftSection.x + clock.x
@@ -256,6 +266,99 @@ PanelWindow {
         anchors.right: parent.right
         spacing: 16
 
+        // system tray (StatusNotifierItem) — left-most cluster on the
+        // right side. Left-click activates (or shows menu for menu-only
+        // items); right-click shows the tray menu via QsMenuAnchor.
+        Row {
+            id: trayRow
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+            visible: SystemTray.items.values.length > 0
+
+            Repeater {
+                // Filter out Passive items per the SNI spec: hosts should
+                // only display Active or NeedsAttention. NeedsAttention
+                // items get a small accent dot rendered below.
+                model: SystemTray.items.values.filter(i => i.status !== Status.Passive)
+
+                Item {
+                    id: trayItem
+                    required property var modelData
+                    required property int index
+                    readonly property int iconSize: 18
+                    readonly property bool needsAttention:
+                        modelData.status === Status.NeedsAttention
+                    implicitWidth:  iconSize
+                    implicitHeight: iconSize
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Image {
+                        anchors.fill: parent
+                        source: trayItem.modelData.icon
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        sourceSize.width:  trayItem.iconSize * 2
+                        sourceSize.height: trayItem.iconSize * 2
+                        opacity: trayMa.containsMouse ? 1.0 : 0.85
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+
+                    // NeedsAttention dot — small cPrimary pulse below the
+                    // icon. SNI defines this status for "the user should
+                    // look at this" (e.g. unread chat).
+                    Rectangle {
+                        visible: trayItem.needsAttention
+                        width: 6; height: 6; radius: 3
+                        color: bar.cPrimary
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: -3
+                        SequentialAnimation on opacity {
+                            running: trayItem.needsAttention
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1.0; to: 0.4; duration: 800; easing.type: Easing.InOutSine }
+                            NumberAnimation { from: 0.4; to: 1.0; duration: 800; easing.type: Easing.InOutSine }
+                        }
+                    }
+
+                    MouseArea {
+                        id: trayMa
+                        anchors.fill: parent
+                        anchors.topMargin: -(bar.barHeight - trayItem.iconSize) / 2
+                        anchors.bottomMargin: -(bar.barHeight - trayItem.iconSize) / 2
+                        anchors.leftMargin: -4
+                        anchors.rightMargin: -4
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        onEntered: {
+                            // Capture this icon's right-edge X in bar root
+                            // coords. mapToItem(bar, …) doesn't work — `bar`
+                            // is a PanelWindow (Window), not a QQuickItem.
+                            // Sum the ancestor positions directly, same
+                            // pattern as volumeRightX/bellRightX above.
+                            bar.trayItemRightX =
+                                rightSection.x + rightRow.x + trayRow.x
+                                + trayItem.x + trayItem.width;
+                            bar.popoutEnter("tray:" + trayItem.index);
+                        }
+                        onExited: bar.popoutLeave()
+                        onClicked: (mouse) => {
+                            var item = trayItem.modelData;
+                            if (mouse.button === Qt.MiddleButton) {
+                                item.secondaryActivate();
+                            } else if (!item.onlyMenu) {
+                                item.activate();
+                            }
+                        }
+                        onWheel: (wheel) => {
+                            trayItem.modelData.scroll(wheel.angleDelta.y, false);
+                        }
+                    }
+                }
+            }
+        }
+
         // volume icon + level — hover opens the volume/MPRIS modal.
         Item {
             id: volWrap
@@ -335,21 +438,26 @@ PanelWindow {
                 id: bellRow
                 spacing: 6
                 TintedIcon {
-                    name: bar.notifCount > 0
-                        ? "critical-notif-symbolic"
-                        : "low-notif-symbolic"
-                    tint: (bellMa.containsMouse || bar.notifOpen)
-                        ? bar.cPrimary : bar.cFg
+                    name: bar.notifMuted
+                        ? "notifications-disabled-symbolic"
+                        : (bar.notifCount > 0
+                            ? "critical-notif-symbolic"
+                            : "low-notif-symbolic")
+                    tint: bar.notifMuted
+                        ? bar.cMuted
+                        : ((bellMa.containsMouse || bar.notifOpen)
+                            ? bar.cPrimary : bar.cFg)
                     size: 20
                     Behavior on tint { ColorAnimation { duration: 120 } }
                 }
                 Text {
                     visible: bar.notifCount > 0
                     text: bar.notifCount
-                    color: bar.cPrimary
+                    color: bar.notifMuted ? bar.cMuted : bar.cPrimary
                     font.pixelSize: 15
                     font.family: bar.fontFamily
                     font.bold: true
+                    Behavior on color { ColorAnimation { duration: 120 } }
                 }
             }
             // Same trick as the power icon — extend the hit-box via
@@ -362,8 +470,10 @@ PanelWindow {
                 anchors.leftMargin: -8
                 anchors.rightMargin: -8
                 hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
                 onEntered: bar.popoutEnter("notifications")
                 onExited:  bar.popoutLeave()
+                onClicked: bar.notifMuteToggle()
             }
         }
     }

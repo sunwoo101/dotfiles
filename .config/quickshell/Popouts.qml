@@ -18,6 +18,7 @@ import QtQuick.Layouts
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Services.SystemTray
 
 PanelWindow {
     id: root
@@ -49,6 +50,10 @@ PanelWindow {
     property real bellRightX:   0
     property real clockLeftX:   0
     property real powerLeftX:   0
+    // single live tray anchor — Bar updates it on each tray-icon onEntered.
+    // Per-icon morph happens because the popout NAME ("tray:N") changes,
+    // which retriggers curConfig + the imperative anchor animation.
+    property real trayItemRightX: 0
 
     signal panelEnter()
     signal panelLeave()
@@ -78,7 +83,21 @@ PanelWindow {
             return { side: "left",  anchor: clockLeftX,   item: calLoader.item };
         if (name === "power" && side === "left")
             return { side: "left",  anchor: powerLeftX,   item: powerLoader.item };
+        if (name && name.indexOf("tray:") === 0 && side === "right")
+            return { side: "right", anchor: trayItemRightX, item: trayLoader.item };
         return null;
+    }
+    // Index into SystemTray.items.values for the currently-hovered tray
+    // icon, derived from popout name "tray:N".
+    readonly property int _trayIndex: {
+        if (!current || current.indexOf("tray:") !== 0) return -1;
+        var n = parseInt(current.substring(5));
+        return isNaN(n) ? -1 : n;
+    }
+    readonly property var _trayItem: {
+        if (_trayIndex < 0) return null;
+        var items = SystemTray.items.values;
+        return _trayIndex < items.length ? items[_trayIndex] : null;
     }
     readonly property var curConfig: _config(current)
     readonly property bool _isOpen: curConfig !== null
@@ -274,6 +293,33 @@ PanelWindow {
                     cPrimary:         root.cPrimary
                     cMuted:           root.cMuted
                     fontFamily:       root.fontFamily
+                }
+            }
+            // Tray menu — single Loader handles every tray:N popout. The
+            // trayItem prop picks up which item to render based on the
+            // current popout name; switching between tray icons morphs
+            // anchor + width but keeps the same Loader instance.
+            Loader {
+                id: trayLoader
+                anchors.right: parent.right
+                anchors.top:   parent.top
+                width:  item ? item.implicitWidth  : 0
+                height: item ? item.implicitHeight : 0
+                active: root.side === "right"
+                opacity: root._trayIndex >= 0 ? 1 : 0
+                enabled: root._trayIndex >= 0
+                z: root._trayIndex >= 0 ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+                }
+                sourceComponent: TrayMenuContent {
+                    trayItem:   root._trayItem
+                    cBg:        root.cBg
+                    cFg:        root.cFg
+                    cPrimary:   root.cPrimary
+                    cMuted:     root.cMuted
+                    fontFamily: root.fontFamily
+                    onRequestClose: root.requestClose()
                 }
             }
             // Left-pinned content (left-side popouts).
