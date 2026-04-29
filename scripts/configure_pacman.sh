@@ -66,17 +66,20 @@ fi
 sudo mkdir -p /usr/local/lib
 sudo tee "$SYNC_SCRIPT" >/dev/null <<'SCRIPT'
 #!/usr/bin/env bash
+set -euo pipefail
 # Extracts hyprland.desktop from the pacman package cache into
 # /usr/local/share/wayland-sessions/ — uwsm searches all XDG_DATA_DIRS/wayland-sessions/
 # so it finds the file there, but SDDM's SessionDir only covers /usr/share/wayland-sessions/.
-pkg=$(find /var/cache/pacman/pkg -name 'hyprland-[0-9]*.pkg.tar.*' | sort -V | tail -1)
+pkg=$(find /var/cache/pacman/pkg -name 'hyprland-[0-9]*.pkg.tar.!(sig)' | sort -V | tail -1)
 if [ -z "$pkg" ]; then
     echo "WARNING: hyprland package not in pacman cache — /usr/local/share/wayland-sessions/hyprland.desktop not updated" >&2
     exit 0
 fi
 mkdir -p /usr/local/share/wayland-sessions
-bsdtar -xOf "$pkg" usr/share/wayland-sessions/hyprland.desktop \
-    > /usr/local/share/wayland-sessions/hyprland.desktop
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+bsdtar -xOf "$pkg" usr/share/wayland-sessions/hyprland.desktop > "$tmp"
+mv "$tmp" /usr/local/share/wayland-sessions/hyprland.desktop
 echo "synced hyprland.desktop → /usr/local/share/wayland-sessions/"
 SCRIPT
 sudo chmod +x "$SYNC_SCRIPT"
