@@ -16,7 +16,7 @@ Item {
     id: root
 
     implicitWidth:  560
-    implicitHeight: 260
+    implicitHeight: 320
 
     required property color cFg
     required property color cPrimary
@@ -100,8 +100,8 @@ Item {
 
             readonly property real hitRadius:           22
             readonly property real approachStartRadius: 56
-            readonly property int  approachDurationMs:  1400
-            readonly property int  spawnIntervalMs:     1000
+            readonly property int  approachDurationMs:  800
+            readonly property int  spawnIntervalMs:     500
 
             // Hit-window thresholds (|1 - lifetime|). Smaller = stricter.
             readonly property real perfectWindow: 0.08

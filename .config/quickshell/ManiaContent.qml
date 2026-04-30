@@ -16,7 +16,7 @@ Item {
     id: root
 
     implicitWidth:  560
-    implicitHeight: 260
+    implicitHeight: 640
 
     required property color cFg
     required property color cPrimary
@@ -94,12 +94,12 @@ Item {
             readonly property var  keyLabels: ["D", "F", "J", "K"]
             readonly property real columnWidth:    width / columnCount
             readonly property real noteHeight:     16
-            readonly property int  fallDurationMs: 1500
+            readonly property int  fallDurationMs: 800
             readonly property real keyPadHeight:   26
             readonly property real keyPadGap:      4
             // Y at which note center should align for a Perfect hit.
             readonly property real judgmentLineY:  height - keyPadHeight - keyPadGap
-            readonly property int  spawnIntervalMs: 650
+            readonly property int  spawnIntervalMs: 200
 
             // Hit-window thresholds in pixels (note-center distance from
             // judgment line). Smaller = stricter. Tuned for fallDurationMs
