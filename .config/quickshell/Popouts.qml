@@ -106,7 +106,11 @@ PanelWindow {
     readonly property var curConfig: _config(current)
     readonly property bool _isOpen: curConfig !== null
     readonly property real _targetW: curConfig && curConfig.item ? curConfig.item.implicitWidth  : 0
-    readonly property real _targetH: curConfig && curConfig.item ? curConfig.item.implicitHeight : 0
+    // When an edge is flush, the bottom edge insets by invRadius for the
+    // cusp scoop — extend panel height so content keeps its full size.
+    readonly property real _targetH: curConfig && curConfig.item
+        ? curConfig.item.implicitHeight + ((_leftAtEdge || _rightAtEdge) ? invRadius : 0)
+        : 0
 
     // Edge detection: the "outer" side (opposite the anchor) is never at
     // a screen edge in any reasonable layout, so derive from side+anchor
@@ -373,11 +377,12 @@ PanelWindow {
     }
 
     // -- SVG path: clockwise from TL. Inverse top corners + rounded
-    // bottom corners on sides not at a screen edge; flush on sides that
-    // are. Three real cases:
+    // bottom corners on sides not at a screen edge. On sides that are
+    // at a screen edge, the side is flush and gets an inverse scoop at
+    // the bottom (tucking into the screen corner). Three real cases:
     //   both-sides-inverse (volume, calendar)
-    //   right at edge       (notifications: TR/BR flush)
-    //   left  at edge       (power: TL/BL flush)
+    //   right at edge       (notifications: TR flush, BR inverse scoop)
+    //   left  at edge       (power: TL flush, BL inverse scoop)
     readonly property string _svgPath: {
         var W = panel.width;
         var H = panel.height;
@@ -385,29 +390,34 @@ PanelWindow {
         var bR = Math.min(cornerRadius, H / 2);
         var L = root._leftAtEdge;
         var Re = root._rightAtEdge;
+        // edge-flush cases inset the bottom edge by R so the cusp-style
+        // inverse scoop has somewhere to tuck (mirrors TR/TL pattern)
+        var bottomY = (Re || L) ? (H - R) : H;
 
         var p = "M 0 0 ";
         p += "L " + W + " 0 ";
 
         if (Re) {
-            // right side flush — straight down from (W, 0) to (W, H)
+            // right flush down to (W, H) cusp, arc up-left to inset bottom
             p += "L " + W + " " + H + " ";
+            p += "A " + R + " " + R + " 0 0 0 " + (W - R) + " " + (H - R) + " ";
         } else {
-            // TR inverse + BR rounded
+            // TR inverse cusp + inset right edge + BR rounded
             p += "A " + R + " " + R + " 0 0 0 " + (W - R) + " " + R + " ";
-            p += "L " + (W - R) + " " + (H - bR) + " ";
-            p += "A " + bR + " " + bR + " 0 0 1 " + (W - R - bR) + " " + H + " ";
+            p += "L " + (W - R) + " " + (bottomY - bR) + " ";
+            p += "A " + bR + " " + bR + " 0 0 1 " + (W - R - bR) + " " + bottomY + " ";
         }
 
-        var bottomEndX = L ? 0 : (R + bR);
-        p += "L " + bottomEndX + " " + H + " ";
+        var bottomEndX = L ? R : (R + bR);
+        p += "L " + bottomEndX + " " + bottomY + " ";
 
         if (L) {
-            // left side flush — straight up from (0, H) to (0, 0)
+            // arc from inset bottom down-left to (0, H) cusp, then left flush
+            p += "A " + R + " " + R + " 0 0 0 0 " + H + " ";
             p += "L 0 0 ";
         } else {
-            // BL rounded + TL inverse
-            p += "A " + bR + " " + bR + " 0 0 1 " + R + " " + (H - bR) + " ";
+            // BL rounded + inset left edge + TL inverse cusp
+            p += "A " + bR + " " + bR + " 0 0 1 " + R + " " + (bottomY - bR) + " ";
             p += "L " + R + " " + R + " ";
             p += "A " + R + " " + R + " 0 0 0 0 0 ";
         }
