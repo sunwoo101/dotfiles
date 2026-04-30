@@ -16,6 +16,8 @@
 - nautilus
 - quickshell
 - qt6ct
+- qt5-wayland
+- qt6-wayland
 - brightnessctl
 - playerctl
 - ttf-jetbrains-mono-nerd
