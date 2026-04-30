@@ -4,7 +4,7 @@ Hyprland + Quickshell on Arch. Catppuccin Mocha, live-reload theming.
 
 Inspired by Caelestia dotfiles.
 
-https://github.com/user-attachments/assets/d1c3d8b9-23e3-467b-9152-03d4997183e6
+https://github.com/user-attachments/assets/f1b4bd98-992c-41e6-ac42-ad39d6f759e0
 
 ## Install
 

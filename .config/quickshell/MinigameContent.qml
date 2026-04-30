@@ -104,9 +104,9 @@ Item {
             readonly property int  spawnIntervalMs:     500
 
             // Hit-window thresholds (|1 - lifetime|). Smaller = stricter.
-            readonly property real perfectWindow: 0.08
-            readonly property real greatWindow:   0.18
-            readonly property real goodWindow:    0.32
+            readonly property real perfectWindow: 0.15
+            readonly property real greatWindow:   0.30
+            readonly property real goodWindow:    0.50
 
             // Live circle list — used for overlap rejection. Manually
             // tracked rather than scanning game.children because that

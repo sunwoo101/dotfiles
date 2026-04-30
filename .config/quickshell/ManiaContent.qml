@@ -104,9 +104,9 @@ Item {
             // Hit-window thresholds in pixels (note-center distance from
             // judgment line). Smaller = stricter. Tuned for fallDurationMs
             // = 1500: each px ≈ 1500 / (height + noteHeight) ms ≈ 7 ms.
-            readonly property real perfectWindow: 8
-            readonly property real greatWindow:   18
-            readonly property real goodWindow:    32
+            readonly property real perfectWindow: 18
+            readonly property real greatWindow:   38
+            readonly property real goodWindow:    64
 
             property var liveNotes: []
             property var keyPads:   []
