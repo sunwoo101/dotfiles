@@ -401,7 +401,7 @@ Item {
                                     Text {
                                         Layout.fillWidth: true
                                         text: notifItem.n.body || ""
-                                        color: root.cMuted
+                                        color: root.cPrimary
                                         font.family: root.fontFamily
                                         font.pixelSize: 14
                                         wrapMode: Text.Wrap
