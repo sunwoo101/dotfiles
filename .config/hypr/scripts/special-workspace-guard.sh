@@ -137,13 +137,24 @@ declare -A active_special
 # rogues (windows we want to disown later).
 declare -A rogues
 
-# Set of special workspace names that should be hidden on their next
-# `activespecial` show event. Populated when a pinned window opens on
-# its expected special — `workspace special:X silent` doesn't prevent
-# Hyprland from visibility-toggling the special when content first
-# appears on it, and the openwindow event fires before activespecial,
-# so we can't dispatch `togglespecialworkspace` until the show arrives.
+# Per-special: epoch-seconds timestamp at which a pinned window opened.
+# `activespecial` show events arriving within $pending_hide_ttl seconds
+# are treated as boot-time auto-pop-ups and toggled back off; older
+# shows are user-initiated and left alone. Hyprland only renders one
+# special per monitor at a time, so at boot only the first pinned
+# app's special actually fires special-show — without a TTL the others'
+# pending_hide flags would linger and incorrectly hide the workspace
+# the first time the user presses its toggle keybind.
 declare -A pending_hide
+pending_hide_ttl=5
+
+# Per-workspace flag: have we already queued a pending_hide for this
+# special at any point? Hyprland's auto-show only fires when a special
+# transitions from empty to non-empty for the first time; subsequent
+# window adds (e.g. Discord's splash → main window swap) don't
+# re-trigger it. Without this guard, the second pin queues a fresh
+# pending_hide, and the next user keypress within the TTL gets eaten.
+declare -A pin_seen
 
 # Resolves the active regular workspace name. Used as the move target
 # when a special workspace closes and we're disowning its rogues.
@@ -205,7 +216,26 @@ while :; do
                 # special workspace visible when a window first appears
                 # on it. Queue a hide for the upcoming activespecial
                 # show event (which fires AFTER openwindow).
-                pending_hide[$workspace]=1
+                if [ -z "${pin_seen[$workspace]:-}" ]; then
+                    pin_seen[$workspace]=1
+                    pending_hide[$workspace]=$(date +%s)
+                fi
+                continue
+            fi
+
+            # Skip floating popups/menus/tooltips/dialogs. Electron apps
+            # (and some others) spawn context menus and tooltips as
+            # separate toplevels on the same workspace as the parent —
+            # they fire openwindow with a class that may or may not
+            # match the owner. Treating them as rogues both refocuses
+            # away from what the user is interacting with AND warps
+            # the cursor to the owner's center (Hyprland's focuswindow
+            # default). Tiled windows are the real rogues we care about
+            # (an app launched from elsewhere onto a visible special).
+            floating=$(hyprctl clients -j 2>/dev/null \
+                | jq -r --arg a "0x${addr}" '.[] | select(.address == $a) | .floating')
+            if [ "$floating" = "true" ]; then
+                log skip-floating "$addr" "$class" "-" "$workspace"
                 continue
             fi
 
@@ -268,10 +298,29 @@ while :; do
                 # (autostart pop-up), hide it back. togglespecialworkspace
                 # acts on the focused monitor; that's where Hyprland just
                 # showed it, so this works even on a multi-monitor setup.
-                if [ -n "${pending_hide[$ws]:-}" ]; then
+                pending_ts=${pending_hide[$ws]:-}
+                if [ -n "$pending_ts" ]; then
                     unset "pending_hide[$ws]"
-                    hyprctl dispatch togglespecialworkspace \
-                        "${ws#special:}" >/dev/null || true
+                fi
+                if [ -n "$pending_ts" ] && [ $(($(date +%s) - pending_ts)) -le $pending_hide_ttl ]; then
+                    # togglespecialworkspace acts on the focused monitor.
+                    # The special was shown on $mon, which may not be the
+                    # focused monitor at boot — toggling from elsewhere
+                    # would teleport/duplicate the overlay and leave
+                    # Hyprland's internal toggle state inverted, so the
+                    # first user keybind press appears to do nothing.
+                    # Focus $mon, toggle, restore focus.
+                    cur=$(hyprctl monitors -j 2>/dev/null \
+                        | jq -r '.[] | select(.focused == true) | .name')
+                    if [ -n "$cur" ] && [ "$cur" != "$mon" ]; then
+                        hyprctl dispatch focusmonitor "$mon" >/dev/null || true
+                        hyprctl dispatch togglespecialworkspace \
+                            "${ws#special:}" >/dev/null || true
+                        hyprctl dispatch focusmonitor "$cur" >/dev/null || true
+                    else
+                        hyprctl dispatch togglespecialworkspace \
+                            "${ws#special:}" >/dev/null || true
+                    fi
                     log auto-hide "-" "$mon" "$ws" "-"
                 fi
             else

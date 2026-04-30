@@ -649,6 +649,7 @@ ShellRoot {
             // Show only if this screen owns the popout. Other screens
             // get current="" so their wrapper stays closed.
             current: shellRoot.popoutOwner === modelData.name ? shellRoot.popoutCurrent : ""
+            interactive: shellRoot.popoutHover !== "" || shellRoot.popoutForced !== ""
             notifServer: notifSrv
             popped: shellRoot.popped
             notifReceivedAt: shellRoot.notifReceivedAt
@@ -683,6 +684,7 @@ ShellRoot {
             cMuted: shellRoot.cMuted
             fontFamily: shellRoot.fontFamily
             current: shellRoot.popoutOwner === modelData.name ? shellRoot.popoutCurrent : ""
+            interactive: shellRoot.popoutHover !== "" || shellRoot.popoutForced !== ""
             notifServer: notifSrv
             popped: shellRoot.popped
             notifReceivedAt: shellRoot.notifReceivedAt

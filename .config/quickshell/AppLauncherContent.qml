@@ -6,6 +6,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Widgets
 
 Item {
@@ -24,6 +25,111 @@ Item {
 
     implicitWidth:  contentWidth
     implicitHeight: contentHeight
+
+    // -- frecency: launch count + last-use timestamp per .desktop id ---------
+    // Persisted to ~/.cache/quickshell/launcher-frecency.json. Empty-query
+    // ordering is pure frecency; query results add a frecency boost on top of
+    // the fuzzy score so familiar apps win on ties.
+    property var frecencyData: ({})
+
+    FileView {
+        id: frecencyFile
+        path: Quickshell.env("HOME") + "/.cache/quickshell/launcher-frecency.json"
+        onLoaded: {
+            try { root.frecencyData = JSON.parse(text()) || {}; }
+            catch (e) { root.frecencyData = {}; }
+        }
+    }
+    Process {
+        id: initFrecency
+        running: true
+        command: ["sh", "-c",
+            "mkdir -p ~/.cache/quickshell && [ -f ~/.cache/quickshell/launcher-frecency.json ] || echo '{}' > ~/.cache/quickshell/launcher-frecency.json"]
+        onExited: frecencyFile.reload()
+    }
+    Process { id: saveFrecency }
+
+    function _persistFrecency() {
+        var b64 = Qt.btoa(JSON.stringify(root.frecencyData));
+        saveFrecency.command = ["sh", "-c",
+            "mkdir -p ~/.cache/quickshell && echo '" + b64
+            + "' | base64 -d > ~/.cache/quickshell/launcher-frecency.json.tmp"
+            + " && mv ~/.cache/quickshell/launcher-frecency.json.tmp ~/.cache/quickshell/launcher-frecency.json"];
+        saveFrecency.running = true;
+    }
+    function _bump(app) {
+        if (!app || !app.id) return;
+        var d = root.frecencyData[app.id] || { count: 0, lastUsed: 0 };
+        d.count = (d.count || 0) + 1;
+        d.lastUsed = Date.now();
+        var copy = Object.assign({}, root.frecencyData);
+        copy[app.id] = d;
+        root.frecencyData = copy;
+        _persistFrecency();
+    }
+    function _frecencyScore(app) {
+        var d = root.frecencyData[app.id];
+        if (!d) return 0;
+        var ageDays = (Date.now() - (d.lastUsed || 0)) / 86400000;
+        return (d.count || 0) / (1 + ageDays / 7);
+    }
+
+    // -- fuzzy match: subsequence with consecutive + word-boundary bonuses --
+    // Returns -1 if `q` is not a subsequence of `t`. Higher = better. Exact
+    // prefix > substring > scattered subsequence.
+    function _fuzzy(q, t) {
+        if (!q) return 0;
+        if (!t) return -1;
+        if (t.startsWith(q)) return 2000 - (t.length - q.length);
+        var idx = t.indexOf(q);
+        if (idx !== -1) return 1000 - idx * 2 - (t.length - q.length) * 0.1;
+        var qi = 0, score = 0, prev = -2, consec = 0;
+        for (var i = 0; i < t.length && qi < q.length; i++) {
+            if (t.charCodeAt(i) === q.charCodeAt(qi)) {
+                score += 10;
+                if (i === prev + 1) { consec++; score += consec * 6; }
+                else { consec = 0; }
+                var pc = i > 0 ? t.charAt(i - 1) : "";
+                if (i === 0 || pc === " " || pc === "-" || pc === "_"
+                    || pc === "." || pc === "/")
+                    score += 12;
+                prev = i;
+                qi++;
+            }
+        }
+        if (qi < q.length) return -1;
+        return score - t.length * 0.05;
+    }
+    function _appScore(app, query) {
+        var rawExec = (app.command && app.command[0])
+            || (app.exec || "").split(" ")[0] || "";
+        var bin = rawExec.split("/").pop().toLowerCase();
+        // Subseq fuzzy only on name + exec basename. Long descriptive fields
+        // (genericName / keywords / comment) trip on short abbreviations like
+        // "nvide" → "Non-linear Video Editor"; restricting them to substring
+        // contains prevents the noisy long tail.
+        var best = -1;
+        var primary = [(app.name || "").toLowerCase(), bin];
+        var weights = [1.0, 0.7];
+        for (var i = 0; i < primary.length; i++) {
+            var s = root._fuzzy(query, primary[i]);
+            if (s < 0) continue;
+            var w = s * weights[i];
+            if (w > best) best = w;
+        }
+        var secondary = [
+            (app.genericName || "").toLowerCase(),
+            (app.keywords || []).join(" ").toLowerCase(),
+            (app.comment || "").toLowerCase()
+        ];
+        var secScores = [40, 30, 20];
+        for (var j = 0; j < secondary.length; j++) {
+            if (secondary[j] && secondary[j].indexOf(query) !== -1
+                && secScores[j] > best)
+                best = secScores[j];
+        }
+        return best;
+    }
 
     function _categoryIcon(cats) {
         if (!cats) return "";
@@ -125,6 +231,12 @@ Item {
                     Keys.onEnterPressed:  list.launchSelected()
                     Keys.onDownPressed:   list.selectNext()
                     Keys.onUpPressed:     list.selectPrev()
+                    Keys.onPressed: (e) => {
+                        if (e.modifiers & Qt.ControlModifier) {
+                            if (e.key === Qt.Key_J) { list.selectNext(); e.accepted = true; }
+                            else if (e.key === Qt.Key_K) { list.selectPrev(); e.accepted = true; }
+                        }
+                    }
 
                     Text {
                         anchors.fill: parent
@@ -150,22 +262,28 @@ Item {
             property int selectedIndex: 0
 
             readonly property var filtered: {
+                var fr = root.frecencyData;
                 var query = searchInput.text.toLowerCase().trim();
-                return DesktopEntries.applications.values
-                    .filter(a => !a.noDisplay)
-                    .filter(a => {
-                        if (!query) return true;
-                        var rawExec = (a.command && a.command[0])
-                            || (a.exec || "").split(" ")[0]
-                            || "";
-                        var bin = rawExec.split("/").pop().toLowerCase();
-                        var hay = [
-                            a.name, a.genericName, a.comment, a.id,
-                            bin, (a.keywords || []).join(" ")
-                        ].join(" ").toLowerCase();
-                        return hay.includes(query);
-                    })
-                    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+                var apps = DesktopEntries.applications.values
+                    .filter(a => !a.noDisplay);
+                if (!query) {
+                    return apps.slice().sort((a, b) => {
+                        var fa = root._frecencyScore(a);
+                        var fb = root._frecencyScore(b);
+                        if (fa !== fb) return fb - fa;
+                        return (a.name || "").localeCompare(b.name || "");
+                    });
+                }
+                var scored = [];
+                for (var i = 0; i < apps.length; i++) {
+                    var s = root._appScore(apps[i], query);
+                    if (s < 0) continue;
+                    var boost = Math.log(1 + root._frecencyScore(apps[i])) * 25;
+                    scored.push({ app: apps[i], score: s + boost });
+                }
+                scored.sort((a, b) => b.score - a.score
+                    || (a.app.name || "").localeCompare(b.app.name || ""));
+                return scored.map(x => x.app);
             }
 
             model: filtered
@@ -183,11 +301,13 @@ Item {
                 if (count === 0) return;
                 var app = filtered[selectedIndex];
                 if (app) {
+                    root._bump(app);
                     app.execute();
                     root.requestClose();
                 }
             }
             function launch(app) {
+                root._bump(app);
                 app.execute();
                 root.requestClose();
             }

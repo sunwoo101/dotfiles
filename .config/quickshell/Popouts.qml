@@ -38,6 +38,10 @@ PanelWindow {
     required property string side          // "left" | "right"
 
     required property string current       // global popout name (or "")
+    // True when the popout is open due to user hover/click, false when it's
+    // an auto-popped notification toast. Drives toast-vs-full UI in
+    // NotificationsContent (clear-all button, full list).
+    required property bool interactive
     required property var notifServer
     required property var popped
     required property var notifReceivedAt
@@ -288,7 +292,7 @@ PanelWindow {
                     now:              root.now
                     expireCallback:   root.expireCallback
                     clearAllCallback: root.clearAllCallback
-                    hovered:          root.current === "notifications"
+                    hovered:          root.current === "notifications" && root.interactive
                     cFg:              root.cFg
                     cPrimary:         root.cPrimary
                     cMuted:           root.cMuted
