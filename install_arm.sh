@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ARM variant of new_install.sh — targets Arch Linux ARM (aarch64).
+# install_arm.sh — targets Arch Linux ARM (aarch64).
 # Differences from the x86_64 script:
 #   - configure_pacman_arm.sh  : NoExtract only; no [multilib] (doesn't exist on ALARM)
 #   - install_pacman_packages_arm.sh : reads packages/pacman-arm (no lib32-*, discord, spotify-launcher)
@@ -36,9 +36,10 @@ run configure_pacman_arm.sh
 run install_pacman_packages_arm.sh
 run install_gpu_drivers_arm.sh
 run install_colloid_icons.sh
-run enable_services.sh
 run render_configs.sh
+run install_sddm_theme.sh
 run symlink_dotfiles.sh
+run enable_services.sh
 run apply_gsettings.sh
 run hook_bashrc.sh
 

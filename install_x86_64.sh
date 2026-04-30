@@ -34,10 +34,10 @@ run install_gpu_drivers.sh
 run install_yay.sh
 run install_aur_packages.sh
 run install_colloid_icons.sh
-run enable_services.sh
 run render_configs.sh
 run install_sddm_theme.sh
 run symlink_dotfiles.sh
+run enable_services.sh
 run apply_gsettings.sh
 run hook_bashrc.sh
 

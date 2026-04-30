@@ -276,7 +276,7 @@ Untouched: `ansi.*` (terminal apps assume "red is red"), `ui.fg` (readability).
 
 ```
 dotfiles/
-├── new_install.sh           # orchestrator
+├── install_x86_64.sh        # orchestrator (ARM variant: install_arm.sh)
 ├── packages/{pacman,aur}    # `- pkgname` per line
 ├── scripts/                 # one concern each, runnable on its own
 │   ├── configure_pacman.sh    # enable [multilib]; point SDDM SessionDir at
