@@ -34,6 +34,22 @@ PanelWindow {
     property int cornerRadius:  16
     property int animDuration:  280
 
+    // Toggle for the Behavior on `panel.width`. Subclasses that want to
+    // snap width without animating (e.g. EdgePopouts on open-from-closed
+    // transitions, where the diagonal grow looks wrong and only height
+    // should animate) set this to false around the assignment that should
+    // snap, then back to true. Mirrors the _anchorBehavior trick in
+    // Popouts.qml.
+    property bool animatePanelWidth: true
+
+    // Horizontal offset from the centered position (only meaningful when
+    // align === "center"). EdgePopouts uses this to morph the panel
+    // between named anchor positions while keeping a single PanelWindow
+    // surface (mirrors Popouts.qml's `_activeAnchor` pattern). Animated
+    // 280 ms OutCubic, gated by `animatePanelXOffset`.
+    property real panelXOffset: 0
+    property bool animatePanelXOffset: true
+
     // PanelWindow surface size — drives the Wayland layer-shell surface.
     // Defaults to tracking contentHeight, so most modals (AppLauncher) animate
     // their surface together with the inner panel. Override (e.g.
@@ -110,9 +126,14 @@ PanelWindow {
         if (open) {
             _animatingClose = false;
             _closeAnimTimer.stop();
-        } else if (closeOnOutsideClick) {
-            _animatingClose = true;
-            _closeAnimTimer.restart();
+            _surfaceCollapseTimer.stop();
+            if (surfaceHeight > _surfaceH) _surfaceH = surfaceHeight;
+        } else {
+            if (closeOnOutsideClick) {
+                _animatingClose = true;
+                _closeAnimTimer.restart();
+            }
+            _surfaceCollapseTimer.restart();
         }
     }
     Timer {
@@ -135,17 +156,28 @@ PanelWindow {
     implicitWidth:  isCenter
         ? -1
         : (open ? panelTotalWidth : 0)
-    implicitHeight: _fullscreen
-        ? -1
-        : (open ? surfaceHeight : 0)
     Behavior on implicitWidth {
         enabled: !isCenter && !_fullscreen
         NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
     }
-    Behavior on implicitHeight {
-        enabled: !_fullscreen
-        NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+
+    // Wayland surface height — decoupled from the inner-panel animation.
+    // Snaps up when opening (or when surfaceHeight grows mid-session, e.g.
+    // CenterPopouts switching launcher↔workspaces with different content
+    // heights), and only drops to 0 after the inner panel has fully
+    // collapsed (timer below). Animating the surface in lockstep with the
+    // inner panel makes the compositor hold the previous-frame buffer for
+    // a frame on close, which renders as an unrounded rectangular halo
+    // around the shrinking Shape. Surface NEVER shrinks while mounted —
+    // mid-session shrinks would re-trigger the halo.
+    property real _surfaceH: 0
+    onSurfaceHeightChanged: if (open && surfaceHeight > _surfaceH) _surfaceH = surfaceHeight
+    Timer {
+        id: _surfaceCollapseTimer
+        interval: root.animDuration + 20
+        onTriggered: if (!root.open) root._surfaceH = 0
     }
+    implicitHeight: _fullscreen ? -1 : _surfaceH
 
     // Mask follows the visible panel rect so input only lands where the
     // panel is actually painted. In fullscreen mode (closeOnOutsideClick)
@@ -188,10 +220,15 @@ PanelWindow {
         id: panel
 
         anchors.horizontalCenter: root.isCenter ? parent.horizontalCenter : undefined
+        anchors.horizontalCenterOffset: root.isCenter ? root.panelXOffset : 0
         anchors.left:  !root.isCenter && root.align === "left"  ? parent.left  : undefined
         anchors.right: !root.isCenter && root.align === "right" ? parent.right : undefined
         anchors.top:    root.edge === "top"    ? parent.top    : undefined
         anchors.bottom: root.edge === "bottom" ? parent.bottom : undefined
+        Behavior on anchors.horizontalCenterOffset {
+            enabled: root.animatePanelXOffset
+            NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+        }
 
         width:  root.panelTotalWidth
         // Inner visible panel height — independent of the PanelWindow's
@@ -201,6 +238,7 @@ PanelWindow {
         // workspaces (~1160) widths.
         height: root.open ? root.contentHeight : 0
         Behavior on width {
+            enabled: root.animatePanelWidth
             NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
         }
         Behavior on height {

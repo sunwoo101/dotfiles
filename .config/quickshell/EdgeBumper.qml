@@ -8,13 +8,16 @@
 // (which would close the modal mid-open). The bumper is invisible, so the
 // 1 px overflow has nothing to clip.
 //
-// Usage in shell.qml — pair with the modal's Variants block:
+// Usage in shell.qml — pair with EdgePopouts (depth-counter pattern, so
+// cursor handoff between bumper and panel doesn't drop the panel):
 //
 //   Variants {
 //       model: _screensWhenReady
-//       FooModal {
-//           modelData: modelData
-//           externalHovered: shellRoot._bumperHovered("foo", modelData.name)
+//       EdgePopouts {
+//           ...
+//           current: shellRoot.bottomOwner === modelData.name ? shellRoot.bottomCurrent : ""
+//           onPanelEnter: shellRoot.bottomEnter("foo", modelData.name)
+//           onPanelLeave: shellRoot.bottomLeave()
 //       }
 //   }
 //   Variants {
@@ -22,9 +25,9 @@
 //       EdgeBumper {
 //           modelData: modelData
 //           edge: "bottom"
-//           hitWidth: 596         // = FooModal.panelTotalWidth
-//           onBumperEnter: shellRoot._setBumperHover("foo", modelData.name, true)
-//           onBumperLeave: shellRoot._setBumperHover("foo", modelData.name, false)
+//           hitWidth: 596         // matches the content's panel total width
+//           onBumperEnter: shellRoot.bottomEnter("foo", modelData.name)
+//           onBumperLeave: shellRoot.bottomLeave()
 //       }
 //   }
 
@@ -39,6 +42,10 @@ PanelWindow {
     property string edge: "bottom"   // "top" | "bottom"
     property int hitWidth:  200
     property int hitHeight: 8
+    // Horizontal placement of the hit region. Default is centered; set
+    // to a screen-x to anchor the hit zone off-center (e.g. for a
+    // bottom-left bumper paired with an align: "left" Modal).
+    property real hitX: (width - hitWidth) / 2
 
     signal bumperEnter()
     signal bumperLeave()
@@ -62,7 +69,7 @@ PanelWindow {
     // through to whatever's below. Height extends 1 px past the surface
     // edge to cover the off-screen overflow row.
     mask: Region {
-        x: (bumper.width - hitWidth) / 2
+        x: bumper.hitX
         y: 0
         width:  hitWidth
         height: hitHeight + 1

@@ -151,6 +151,22 @@ PanelWindow {
         id: _anchorBehavior
         NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
     }
+    // _targetH can change AFTER curConfig has stabilized — async content
+    // load (tray menu items arriving via SNI, notifications list growing).
+    // Without this, _surfaceH stays at whatever value it had when the
+    // popout first opened (often 0, when the inner item.implicitHeight
+    // hadn't resolved yet), and the panel renders into a 0-height surface
+    // (i.e. nothing visible). Subsequent popout switches recover because
+    // onCurConfigChanged re-runs the grow check.
+    Connections {
+        target: root
+        function on_TargetHChanged() {
+            if (root._isOpen && root._targetH > root._surfaceH) {
+                root._surfaceH = root._targetH;
+            }
+        }
+    }
+
     Connections {
         target: root
         function onCurConfigChanged() {
@@ -161,8 +177,17 @@ PanelWindow {
             if (!cur) {
                 // closing — slide the anchor edge out toward the screen edge
                 root._activeAnchor = screenEdge;
+                // Hold the surface height; collapse only after the inner
+                // panel finishes animating. Prevents the ghost-buffer halo.
+                _surfaceCollapseTimer.restart();
                 return;
             }
+            // opening or switching: surface only GROWS (never shrinks
+            // mid-session). Shrinking surface mid-morph would cut off the
+            // outgoing panel and re-trigger the ghost-buffer halo. The
+            // surface only collapses to 0 after a full close (timer below).
+            _surfaceCollapseTimer.stop();
+            if (root._targetH > root._surfaceH) root._surfaceH = root._targetH;
             if (!prev) {
                 // opening from closed — snap to the screen edge first (so
                 // we don't animate from wherever we last closed), then
@@ -182,9 +207,27 @@ PanelWindow {
     // -- root window ---------------------------------------------------
     anchors { top: true; left: true; right: true }
     margins.top: 0
-    implicitHeight: _isOpen ? _targetH : 0
-    Behavior on implicitHeight {
+
+    // Inner panel height — animates smoothly. The Wayland surface height
+    // (implicitHeight) is decoupled and held during the close animation:
+    // shrinking the surface mid-anim causes the compositor to keep the
+    // previous-frame buffer onscreen for a frame, manifesting as an
+    // unrounded window halo around the collapsing Shape (same ghost-buffer
+    // class as ThemeSwitcher's surface resize). Holding the surface at the
+    // open size and only animating the inner panel keeps the SVG and the
+    // surface visually in lockstep.
+    property real _innerH: _isOpen ? _targetH : 0
+    Behavior on _innerH {
         NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+    }
+    // Surface height — no Behavior. Snaps up on open/switch; only drops to
+    // 0 once the inner panel has fully collapsed (timer below).
+    property real _surfaceH: 0
+    implicitHeight: _surfaceH
+    Timer {
+        id: _surfaceCollapseTimer
+        interval: root.animDuration + 20
+        onTriggered: if (!root._isOpen) root._surfaceH = 0
     }
 
     // input mask: panel area only — passes input on regions outside the
@@ -219,7 +262,7 @@ PanelWindow {
             ? root._activeAnchor - panel.width + root._anchorInset
             : root._activeAnchor - root._anchorInset
         width:  root._panelWidth
-        height: root.implicitHeight
+        height: root._innerH
         anchors.top: parent.top
 
         Behavior on width {
@@ -244,6 +287,15 @@ PanelWindow {
             anchors.fill: parent
             anchors.leftMargin:  root._leftAtEdge  ? 0 : root.invRadius
             anchors.rightMargin: root._rightAtEdge ? 0 : root.invRadius
+            // Clip to the Shape's body region (panel rect minus inverse-corner
+            // insets). Loaders inside are anchored to one edge with a fixed
+            // implicitWidth — when the panel morphs to a narrower target,
+            // the outgoing content's far edge would otherwise slide into the
+            // inverse-corner area (transparent, outside the Shape fill) and
+            // be visible during the cross-fade. Panel-level clip:true uses
+            // the rectangular bounding box, not the Shape path, so it can't
+            // catch this on its own.
+            clip: true
 
             // Right-pinned content (right-side popouts).
             Loader {

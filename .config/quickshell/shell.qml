@@ -1,8 +1,8 @@
 //@ pragma UseQApplication
 
 // shell.qml — entry point. Holds shared state (colors, theme, system polling)
-// and instantiates one Bar + one ThemeSwitcher per monitor via Variants.
-// All visible chrome lives in Bar.qml / ThemeSwitcher.qml.
+// and instantiates one Bar + EdgePopouts wrappers per monitor via Variants.
+// All visible chrome lives in Bar.qml / EdgePopouts.qml + content files.
 
 import QtQuick
 import Quickshell
@@ -502,6 +502,38 @@ ShellRoot {
         _centerHoverManaged = false;
         centerCloseTimer.stop();
     }
+    // -- bottom edge popouts (themes; future bottom siblings) -----------
+    // Mirrors centerEnter/centerLeave above: a depth counter aggregates
+    // hover from the bottom EdgeBumper AND from the cursor crossing onto
+    // the panel itself, so the 250 ms grace timer absorbs the brief gap
+    // when the cursor moves between the two surfaces. Without this, the
+    // panel collapses the moment the cursor leaves the 8 px bumper hit
+    // zone, even if it's now on the expanding panel.
+    property string bottomCurrent: ""
+    property string bottomOwner: ""
+    property int _bottomHoverDepth: 0
+    Timer {
+        id: bottomCloseTimer
+        interval: 250
+        onTriggered: shellRoot.bottomHide()
+    }
+    function bottomEnter(name, screen) {
+        _bottomHoverDepth += 1;
+        bottomCloseTimer.stop();
+        bottomCurrent = name;
+        bottomOwner = screen;
+    }
+    function bottomLeave() {
+        _bottomHoverDepth = Math.max(0, _bottomHoverDepth - 1);
+        if (_bottomHoverDepth === 0) bottomCloseTimer.restart();
+    }
+    function bottomHide() {
+        bottomCurrent = "";
+        bottomOwner = "";
+        _bottomHoverDepth = 0;
+        bottomCloseTimer.stop();
+    }
+
     // Shorthands for the launcher IPC handler — preserves the existing
     // qs ipc surface (`launcher show|hide|toggle`).
     function launcherShow()   { centerShow("launcher"); }
@@ -705,76 +737,186 @@ ShellRoot {
         }
     }
 
-    // -- EdgeBumper hover registry --------------------------------------
-    // Generic per-(modal, screen) hover state. Each non-bar modal that uses
-    // an EdgeBumper picks a unique name string and reads/writes through
-    // these helpers; map reassignment (vs in-place mutation) is what makes
-    // QML re-evaluate the bound externalHovered properties.
-    property var _bumperHover: ({})
-    function _bumperKey(name, screenName) { return name + "::" + screenName; }
-    function _setBumperHover(name, screenName, hovered) {
-        var copy = Object.assign({}, _bumperHover);
-        copy[_bumperKey(name, screenName)] = hovered;
-        _bumperHover = copy;
-    }
-    function _bumperHovered(name, screenName) {
-        return _bumperHover[_bumperKey(name, screenName)] === true;
+    // Bottom EdgePopouts wrappers. Two panels — themes (centered) and
+    // minigame (bottom-left) — each with its own permanent 8 px peek
+    // strip. They share `bottomCurrent` + `bottomEnter`/`bottomLeave`,
+    // so sliding between bumpers updates the shared name, both wrappers
+    // re-evaluate `current`, and one panel collapses while the other
+    // expands in the same animation frame (simultaneous morph rather
+    // than close-then-open).
+    //
+    // Bottom EdgePopouts — hosts the ThemeSwitcher (and any future
+    // bottom-edge siblings) with peekHeight: 8 so the panel stays mounted
+    // as a thin sliver until the bottom edge bumper triggers it open.
+    Variants {
+        model: _screensWhenReady
+        EdgePopouts {
+            id: themesEdge
+            modelData: modelData
+            edge: "bottom"
+            cBg: shellRoot.cBg
+            peekHeight: 8
+            peekDefault: "themes"
+            current: (shellRoot.bottomOwner === modelData.name && shellRoot.bottomCurrent === "themes")
+                ? "themes" : ""
+            // Cursor on this panel keeps the same depth counter the bumpers
+            // increment, so crossing bumper → panel doesn't drop hover.
+            onPanelEnter: shellRoot.bottomEnter("themes", modelData.name)
+            onPanelLeave: shellRoot.bottomLeave()
+            contents: [
+                { name: "themes", source: themesContentComp },
+            ]
+
+            Component {
+                id: themesContentComp
+                ThemeSwitcherContent {
+                    cFg:                shellRoot.cFg
+                    cPrimary:           shellRoot.cPrimary
+                    cMuted:             shellRoot.cMuted
+                    fontFamily:         shellRoot.fontFamily
+                    mochaAccents:       shellRoot.mochaAccents
+                    currentFlavor:      shellRoot.currentFlavor
+                    setAccent:          (name, hex) => shellRoot.setAccent(name, hex)
+                    toggleFlavor:       () => shellRoot.toggleFlavor()
+                    clearOverride:      () => shellRoot.clearOverride()
+                    panelVisibleHeight: themesEdge.visibleHeight
+                    peekHeight:         themesEdge.peekHeight
+                }
+            }
+        }
     }
 
     Variants {
         model: _screensWhenReady
-        ThemeSwitcher {
+        EdgePopouts {
+            id: minigameEdge
             modelData: modelData
+            edge: "bottom"
             cBg: shellRoot.cBg
-            cFg: shellRoot.cFg
-            cPrimary: shellRoot.cPrimary
-            cMuted: shellRoot.cMuted
-            fontFamily: shellRoot.fontFamily
-            mochaAccents: shellRoot.mochaAccents
-            currentFlavor: shellRoot.currentFlavor
-            setAccent: (name, hex) => shellRoot.setAccent(name, hex)
-            toggleFlavor: () => shellRoot.toggleFlavor()
-            clearOverride: () => shellRoot.clearOverride()
-            externalHovered: shellRoot._bumperHovered("themeSwitcher", modelData.name)
+            peekHeight: 8
+            peekDefault: "minigame"
+            // Center the panel in the available space between screen-left
+            // and the themes panel's left edge. Themes is screen-centered
+            // with total width 596, so its left edge is at (W - 596)/2.
+            // Minigame panel is also 596 wide; we want its center at the
+            // midpoint of [0, (W - 596)/2], i.e. (W - 596)/4. Offset from
+            // screen center (W/2) is therefore -(W + 596)/4.
+            panelXOffset: -(width + 596) / 4
+            current: (shellRoot.bottomOwner === modelData.name && shellRoot.bottomCurrent === "minigame")
+                ? "minigame" : ""
+            onPanelEnter: shellRoot.bottomEnter("minigame", modelData.name)
+            onPanelLeave: shellRoot.bottomLeave()
+            contents: [
+                { name: "minigame", source: minigameContentComp },
+            ]
+
+            Component {
+                id: minigameContentComp
+                MinigameContent {
+                    cFg:                shellRoot.cFg
+                    cPrimary:           shellRoot.cPrimary
+                    cMuted:             shellRoot.cMuted
+                    fontFamily:         shellRoot.fontFamily
+                    panelVisibleHeight: minigameEdge.visibleHeight
+                    peekHeight:         minigameEdge.peekHeight
+                    // Run the game only while the window is fully open;
+                    // peek collapses unload the gameplay Loader entirely
+                    // (timers + animations destroyed). Score persists
+                    // across reopen on MinigameContent itself.
+                    // Use minigameEdge.current rather than shellRoot
+                    // bottomCurrent + bottomOwner so we don't have to
+                    // resolve modelData across Component boundaries.
+                    active: minigameEdge.current === "minigame"
+                }
+            }
         }
     }
 
+    // Themes bumper — centered hit zone matching ThemeSwitcher's panel width.
     Variants {
         model: _screensWhenReady
         EdgeBumper {
             modelData: modelData
             edge: "bottom"
-            hitWidth: 596    // matches ThemeSwitcher.panelTotalWidth
-            onBumperEnter: shellRoot._setBumperHover("themeSwitcher", modelData.name, true)
-            onBumperLeave: shellRoot._setBumperHover("themeSwitcher", modelData.name, false)
+            hitWidth: 596    // matches ThemeSwitcherContent panel total width
+            onBumperEnter: shellRoot.bottomEnter("themes", modelData.name)
+            onBumperLeave: shellRoot.bottomLeave()
+        }
+    }
+    // Minigame bumper — centered in the gap between screen-left and the
+    // themes bumper. Same hit zone width as the panel (596), positioned
+    // at (gap_width - hitWidth) / 2 = (W - 1788) / 4.
+    Variants {
+        model: _screensWhenReady
+        EdgeBumper {
+            modelData: modelData
+            edge: "bottom"
+            hitWidth: 596    // = MinigameContent panel total width
+            hitX: (width - 1788) / 4
+            onBumperEnter: shellRoot.bottomEnter("minigame", modelData.name)
+            onBumperLeave: shellRoot.bottomLeave()
         }
     }
 
 
-    // Center popouts wrapper — hosts the AppLauncher and workspaces
+    // Top EdgePopouts wrapper — hosts the AppLauncher and workspaces
     // overview as crossfading Loaders so they morph between each other
     // (same pattern as Popouts.qml does for left/right side popouts).
     Variants {
         model: _screensWhenReady
-        CenterPopouts {
+        EdgePopouts {
+            id: topEdge
             modelData: modelData
+            edge: "top"
             cBg: shellRoot.cBg
-            cFg: shellRoot.cFg
-            cPrimary: shellRoot.cPrimary
-            cMuted: shellRoot.cMuted
-            fontFamily: shellRoot.fontFamily
             current: shellRoot.centerOwner === modelData.name
                 ? shellRoot.centerCurrent
                 : ""
+            ipcContentName: "launcher"
             ipcManaged: !shellRoot._centerHoverManaged
-            thumbDir: shellRoot._workspaceThumbDir
-            thumbVersion: shellRoot._workspaceThumbVersion
+            contents: [
+                { name: "launcher",   source: launcherContentComp },
+                { name: "workspaces", source: workspacesContentComp },
+            ]
             // Hover handoff: cursor on the panel keeps the same depth
             // counter the bar icons increment, so crossing icon → panel
             // never drops to zero.
             onPanelEnter: shellRoot.centerEnter(shellRoot.centerCurrent || "launcher", modelData.name)
             onPanelLeave: shellRoot.centerLeave()
             onRequestClose: shellRoot.centerHide()
+            // Launcher needs keyboard focus on its search input when it
+            // becomes the active content (IPC summon, hover summon, or
+            // morph from workspaces).
+            onContentActivated: name => {
+                if (name === "launcher") {
+                    var l = topEdge._loaderByName["launcher"];
+                    if (l && l.item) l.item.focusSearch();
+                }
+            }
+
+            Component {
+                id: launcherContentComp
+                AppLauncherContent {
+                    cFg:        shellRoot.cFg
+                    cPrimary:   shellRoot.cPrimary
+                    cMuted:     shellRoot.cMuted
+                    fontFamily: shellRoot.fontFamily
+                    onRequestClose: shellRoot.centerHide()
+                }
+            }
+            Component {
+                id: workspacesContentComp
+                WorkspacesContent {
+                    cBg:          shellRoot.cBg
+                    cFg:          shellRoot.cFg
+                    cPrimary:     shellRoot.cPrimary
+                    cMuted:       shellRoot.cMuted
+                    fontFamily:   shellRoot.fontFamily
+                    thumbDir:     shellRoot._workspaceThumbDir
+                    thumbVersion: shellRoot._workspaceThumbVersion
+                    onRequestClose: shellRoot.centerHide()
+                }
+            }
         }
     }
 

@@ -43,16 +43,15 @@ Order: `render_configs.sh` → `apply_gsettings.sh` → `reload_all.sh`. The Qui
 
 ## Quickshell (`.config/quickshell/`)
 
-`shell.qml` holds shared state; per-screen panels are instantiated via `Variants`. **All bar drop-down popouts (volume, notifications, calendar, power, tray, workspaces) share one Popouts wrapper window per side per screen** that morphs between contents (animated `panel.x`/`width`/`height`, fading content). AppLauncher and ThemeSwitcher are standalone `Modal` instances.
+`shell.qml` holds shared state; per-screen panels are instantiated via `Variants`. **All bar drop-down popouts (volume, notifications, calendar, power, tray) share one Popouts wrapper window per side per screen** that morphs between contents (animated `panel.x`/`width`/`height`, fading content). The launcher + workspaces overview share one **top-edge `EdgePopouts`** wrapper; ThemeSwitcher lives in a sibling **bottom-edge `EdgePopouts`** with `peekHeight: 8`. Both EdgePopouts wrappers extend `Modal.qml`.
 
 ```
 shell.qml                # state (colors, theme, popout, system) + Variants
 Bar.qml                  # top bar; exposes anchor X for each popout trigger
 Modal.qml                # base PanelWindow for standalone modals
 Popouts.qml              # wrapper hosting all bar popouts; SVG path adapts to edge state
-{Volume,Notifications,Calendar,PowerMenu,Tray,Workspaces}Content.qml
-AppLauncher.qml          # centered top-anchored Modal (closeOnOutsideClick)
-ThemeSwitcher.qml        # bottom centered Modal — accent grid, dark/light, reset
+EdgePopouts.qml          # generic top/bottom edge wrapper with optional peek mode
+{Volume,Notifications,Calendar,PowerMenu,Tray,Workspaces,AppLauncher,ThemeSwitcher,Minigame}Content.qml
 EdgeBumper.qml           # invisible hover trigger anchored to a screen edge
 Lock.qml                 # WlSessionLock screen with PamContext auth
 CardButton.qml           # reusable button surface
@@ -63,8 +62,8 @@ TintedIcon.qml           # symbolic SVG via Quickshell.iconPath, recolored by Mu
 
 **Per-screen ownership.** Every modal-style PanelWindow is instantiated per-monitor via `Variants`. Without scoping, hover/IPC state opens on every monitor at once. Each variant filters on an *owner screen name*:
 - Popouts: `current: popoutOwner === modelData.name ? popoutCurrent : ""`. `popoutOwner` is set on `popoutEnter(name, screen)` (bar passes `modelData.name`) or `popoutShow(name)` (IPC; uses `focusedScreen`).
-- AppLauncher: `open: launcherOpen && launcherOwner === modelData.name`. Owner captured from `focusedScreen` on `launcherShow()`.
-- ThemeSwitcher: each screen has its own EdgeBumper, so hover is naturally local.
+- Top EdgePopouts (launcher + workspaces): `current: centerOwner === modelData.name ? centerCurrent : ""`. Owner captured from `focusedScreen` on `launcherShow()` / from `popoutEnter`'s `screen` arg on hover.
+- Bottom EdgePopouts (themes): each screen has its own EdgeBumper, so hover is naturally local — no owner gating needed.
 
 `focusedScreen` is `Hyprland.focusedWorkspace.monitor.name`.
 
@@ -121,21 +120,39 @@ One PanelWindow per side per screen — `Variants` × 2 (right hosts volume/noti
 - **Mute** — bell click toggles `shellRoot.notifMuted`. Muted: `popNotif` still tracks but skips the toast strip; bell icon swaps to `notifications-disabled-symbolic` and tints `cMuted`. Hover still opens the popout.
 - **Toast vs full list** — auto-popped toasts and the user-opened panel share one `NotificationsContent` instance; `hovered` (= Popouts `interactive` flag, true only when `popoutHover`/`popoutForced` is set) gates which is shown. Toast: src=`popped`, no Clear-all button, no empty state. Hover/click: src=full tracked list, Clear-all + empty state shown.
 
-### Standalone modals (AppLauncher, ThemeSwitcher)
+### EdgePopouts wrapper (top + bottom)
 
-Both extend `Modal.qml` — derives corner config from `edge`+`align`, builds SVG path generically, animates BOTH `implicitWidth` and `implicitHeight` 280 ms `OutCubic` (drawer feel matching Popouts).
+Generic Modal-based wrapper for top- or bottom-edge centered modals that host multiple swappable contents. Replaces the former standalone `AppLauncher.qml` / `ThemeSwitcher.qml` and the launcher/workspaces-specific `CenterPopouts.qml`. Two instances live in `shell.qml`: top edge hosts `AppLauncherContent` + `WorkspacesContent`, bottom hosts `ThemeSwitcherContent`.
 
-- `WlrLayershell.layer: Overlay`. Mask excludes top `barHeight` on top-anchored modals.
-- `closeOnOutsideClick: true` (AppLauncher only) — expands the PanelWindow fullscreen + transparent click-catcher behind. `_animatingClose` keeps `_fullscreen=true` until the close animation finishes so the panel has somewhere to animate inside.
+- Caller passes `contents: [{ name, source: Component, xOffset?: real }, ...]`. A `Repeater` instantiates one always-active Loader per entry; per-name z/opacity/enabled are gated on `current === name`. Loaders register into `_loaderByName` on load so the wrapper can resolve sticky sizing imperatively. `xOffset` (default 0) shifts the panel horizontally from screen-center; switching between contents with different xOffsets animates `Modal.panelXOffset` alongside width/height (Popouts.qml-style anchor morph). Sticky on close, like width.
+- `signal contentActivated(name)` fires whenever `current` becomes a non-empty value. Used by the top wrapper to call `launcherLoader.item.focusSearch()` when the launcher becomes active (hover, switch from workspaces, or IPC summon).
+- **`Modal.animatePanelWidth` toggle.** `Behavior on panel.width` is gated by this flag (default true). `EdgePopouts` flips it false → assigns `_stickyWidth` → flips true on `"" → name` transitions, so the wrapper SNAPS width on initial open and only height animates (ThemeSwitcher-style vertical reveal). On switch (launcher↔workspaces, or future bottom siblings) the flag stays true and the wrapper morphs both axes. On close, `_stickyWidth/_stickyHeight` stay pinned at the last shown content's size; `panel.height` collapses (to 0 in full-close mode, or to `peekHeight` in peek mode) via the existing `contentHeight` binding. Don't bind `contentWidth`/`Height` directly to `current + loader.implicitWidth` — that re-introduces the diagonal grow on open and shrink on close.
+- **Peek mode (`peekHeight > 0`).** Panel stays mounted at `peekHeight` px when `current === ""` instead of fully unmounting. `peekDefault` names which content's loader provides the resting strip width — captured into `_stickyWidth` on first load. The bottom EdgePopouts uses `peekHeight: 8`, `peekDefault: "themes"` to keep ThemeSwitcher's discoverable sliver at the screen bottom. `Modal` already promotes inverse corners → flush below `invRadius`, so the 8 px sliver renders as a clean strip.
+- **IPC content support.** `ipcContentName` + `ipcManaged` knobs reproduce the launcher's `closeOnOutsideClick` + `Exclusive` keyboard focus path generically. When `ipcManaged && current === ipcContentName`, the wrapper expands to fullscreen with a click-catcher and grabs Exclusive focus; otherwise OnDemand focus on the named content (avoids the Hyprland pointer-redirect flash that Exclusive caused for hover-summons).
+- **Bumper hover passthrough.** `externalHovered: bool` — when set true, emits a synthetic `panelEnter()` so an `EdgeBumper` can drive open without the cursor crossing onto the panel itself. Required because Wayland sends pointer-leave at the very last pixel row of a surface; the bumper's 1 px overflow surface dodges that.
 
-**AppLauncher** — top-center. IPC: `qs ipc call launcher show|hide|toggle`. `WlrLayershell.keyboardFocus: Exclusive` while open; focus grabbed via 60 ms timer (`Qt.callLater` fires too early before the surface is mapped).
+**AppLauncherContent** — IPC: `qs ipc call launcher show|hide|toggle` → routes to `launcherShow/Hide/Toggle` → `centerShow("launcher")`. Focus grabbed via 60 ms timer (`Qt.callLater` fires too early before the surface is mapped). `focusSearch()` exposed for the wrapper to call on activation.
 - **Search** — fuzzy subsequence match across name / genericName / exec basename / keywords / comment, with field weights (name > keywords > comment), exact-prefix and word-boundary bonuses. Empty query sorts by frecency only.
 - **Frecency** — per-`.desktop` `{count, lastUsed}` persisted at `~/.cache/quickshell/launcher-frecency.json` (gitignored, outside repo). Score = `count / (1 + ageDays/7)`. With a query: adds `ln(1 + frecency) × 25` boost — meaningful tiebreaker, never enough to outrank a strong fuzzy hit. Bumped on launch (Enter or click); written via base64-piped atomic temp+rename to avoid quoting issues with the JSON payload.
 
-**ThemeSwitcher** — bottom-center. Peek strip `collapsedHeight: 8` → `expandedHeight: 260` on hover. Internal 250 ms grace timer absorbs Wayland leave/enter spam during surface resize.
-- Sets `surfaceHeight: expandedHeight` so the Wayland layer surface stays a constant 260 px and only the inner panel animates 8 ↔ 260. Without this, repeated surface-resize leaves a ghost copy of the inverse-rounded bottom corners (looks like a "second bar with inverse rounds" lagging).
-- Modal promotes inverse corners to flush when `H < invRadius`. At the 8 px peek the elliptical inverse arc squashes into a stub that reads as a stray curl — flat-bottom looks intentional.
-- Hover from two sources combined via `_hoverSources` counter: Modal's root `HoverHandler` and an `EdgeBumper` at the screen bottom.
+**ThemeSwitcherContent** — bottom-center. Inner Column opacity = `(panelVisibleHeight - peekHeight) / (implicitHeight - peekHeight)`, so at peek the bg shows through with no controls visible.
+- Bottom EdgePopouts pins `surfaceHeight` constant by virtue of `_surfaceH` only growing — repeated peek/expand cycles don't trigger the compositor's surface-resize ghost (formerly an inverse-corner ghost copy lagging behind the visible panel).
+- Hover from two sources combined: Modal's root `HoverHandler` and an `EdgeBumper` at the screen bottom feed `panelEnter`/`Leave` through Modal's `_hoverSources` counter, so handoff between sources doesn't drop hover momentarily.
+
+**MinigameContent** — bottom-left, paired sibling to ThemeSwitcher (separate `EdgePopouts` instance, shared `bottomCurrent`/`bottomEnter`/`bottomLeave` so both peek bars stay visible simultaneously and switching morphs cleanly). Tiny osu-style game: hit circles spawn on a 1 s timer at non-overlapping random positions; an approach circle shrinks toward each one over 1.4 s; click as it meets the hit circle.
+- **Resource gating** — gameplay subtree lives in a `Loader { active: minigameEdge.current === "minigame" }`. Collapsed → Loader unloads, killing every Timer + NumberAnimation. Reopen instantiates a fresh `gameComponent` whose `Component.onCompleted` resets `score` and `combo` on `root` (the values live on `root` so the score Text stays bound across reload, but reset to 0 on every fresh game).
+- **Overlap rejection** — `game.liveCircles` is a hand-tracked array (push on `Component.onCompleted`, splice on `Component.onDestruction`); spawn picks a random `(x, y)` and rejects up to 25 candidates that fall within `2 × hitRadius + 8 px` of any live circle, skips the tick if no clear spot exists. Don't scan `game.children` — it includes Timers, Components, and floating indicator labels.
+- **Scoring** — judgment by `dist = |1 - lifetime|`: Perfect (<0.08, 300 pts), Great (<0.18, 100), Good (<0.32, 50), else Miss (0). Combo bumps on every non-Miss; score per hit = `round(base × (1 + (combo - 1) × 0.05))`. Miss resets combo. Judgment indicator (`Text` floating up + fading out via `ParallelAnimation`) self-destroys via `onFinished: indicator.destroy()`.
+- **Timeout = Miss** — circle's lifetime `NumberAnimation onFinished` calls `judge(lifetime, x, y, expired=true)`; the same path the click MouseArea calls but forced to Miss.
+- **Anchor scope** — `active: minigameEdge.current === "minigame"` (NOT `shellRoot.bottomCurrent === "minigame" && bottomOwner === modelData.name`) — `modelData` doesn't reliably resolve across `Component { ... }` declaration boundaries inside Variants delegates, but the EdgePopouts instance ID does because each Variants delegate has its own scope.
+
+### Adding a new bottom-edge popout
+
+1. Write `FooContent.qml` — plain `Item` with `implicitWidth`/`implicitHeight`. No `PanelWindow`.
+2. In `shell.qml`'s bottom EdgePopouts: extend `contents` with `{ name: "foo", source: fooContentComp }` and add a sibling `Component { id: fooContentComp; FooContent { ... } }` that wires props from `shellRoot`.
+3. Add a trigger — either subdivide the existing bottom `EdgeBumper` into per-content regions, or add a sibling `EdgeBumper` for the new content. Drive `current` from a per-content `_bumperHovered` lookup (the registry in `shell.qml:708-722` is already generic).
+
+Wrapper morph between bottom siblings is automatic.
 
 ### Workspaces overview
 
@@ -149,13 +166,9 @@ Hover-driven Modal (top edge, centered), name `"workspaces"`. Thumbnails are PNG
 
 ### Adding a non-bar edge modal
 
-Wayland sends pointer-leave when the cursor lands on the very last pixel row of a surface — closing the modal mid-open. `EdgeBumper` bleeds 1 px past the edge on its own surface to dodge this.
+Wayland sends pointer-leave when the cursor lands on the very last pixel row of a surface — closing the modal mid-open. `EdgeBumper` bleeds 1 px past the edge on its own surface to dodge this. **Cross-surface hover (bumper → panel) requires a depth counter**, otherwise the gap between the bumper firing leave and the panel firing enter collapses the modal.
 
-1. Modal subclass: `property bool externalHovered: false; onExternalHoveredChanged: externalHovered ? panelEnter() : panelLeave()`. Implement `_hoverSources` counter so enter/leave increment/decrement instead of toggling — keeps hover stable when the cursor crosses between bumper and panel (see `ThemeSwitcher.qml`).
-2. shell.qml: add the modal's `Variants` block with `externalHovered: shellRoot._bumperHovered("<name>", modelData.name)`.
-3. shell.qml: parallel `Variants { EdgeBumper }` with `edge`, `hitWidth`, and `onBumperEnter/Leave` calling `_setBumperHover("<name>", modelData.name, ...)`.
-
-Registry (`_bumperHover`, `_bumperHovered`, `_setBumperHover`) is generic — no per-modal property needed.
+Bottom EdgePopouts already implements this via `bottomEnter(name, screen)` / `bottomLeave()` in `shell.qml`: both the EdgeBumper's `onBumperEnter/Leave` AND EdgePopouts' `onPanelEnter/Leave` call into the same pair. A 250 ms `bottomCloseTimer` absorbs the brief zero-depth gap during handoff. `bottomCurrent` / `bottomOwner` track which content is active and on which screen. Mirror this shape (`<edge>Enter` / `<edge>Leave` / `<edge>CloseTimer`) for any new edge that needs cross-source hover aggregation.
 
 ## Critical invariants & gotchas
 
@@ -183,16 +196,14 @@ AppLauncher's `_launcherHoverDepth` follows the same shape. **AppLauncher has du
 ### Inverse-corner arcs at small H
 
 When the panel collapses below `2 × invRadius`, a quarter-circle inverse arc can no longer fit. Two valid strategies:
-- `Modal.qml` — elliptical arcs (`A invRadius R 0 0 0 …`). Carve keeps `invRadius` width; only the vertical extent squashes. Required for ThemeSwitcher's 8 px peek.
+- `Modal.qml` — elliptical arcs (`A invRadius R 0 0 0 …`). Carve keeps `invRadius` width; only the vertical extent squashes. Required for the bottom EdgePopouts' 8 px ThemeSwitcher peek.
 - `Popouts.qml` — assumes panel is always tall enough; uses circular arcs (`A R R 0 0 0 …`) and clamps `R` to `H/2` defensively.
 
 Don't switch back to circular arcs in `Modal.qml` without clamping the carve width — the chord-vs-radius constraint breaks at small H.
 
-### Modal `surfaceHeight` vs panel height
+### Surface height is always decoupled from the inner panel
 
-`Modal.qml` separates the Wayland-layer surface size (`surfaceHeight` → `implicitHeight`) from the inner `panel.height`. Default `surfaceHeight: contentHeight` — they animate together (AppLauncher).
-
-Override to a constant when the panel toggles size frequently (ThemeSwitcher): repeated layer-surface resize on Wayland leaves a visible ghost of the previous-frame buffer. Mask follows the visible panel rect so the unused portion still passes input through.
+Both `Modal.qml` and `Popouts.qml` separate the Wayland-layer surface size (`implicitHeight`) from the animated inner `panel.height`. The surface is **non-animated** and only grows: it snaps up to the target on open / on `surfaceHeight` change / on switch, and drops to 0 only after `_surfaceCollapseTimer` fires (`animDuration + 20 ms` post-close). Animating the surface in lockstep with the inner panel makes the compositor hold the previous-frame buffer for a frame during a close or shrink — manifesting as an unrounded rectangular halo around the collapsing Shape (or, for the bottom EdgePopouts' repeated peek/expand cycles, a persistent ghost of the previous corners). Surface NEVER shrinks while mounted; mid-session shrinks (e.g. EdgePopouts switching launcher↔workspaces with different heights) would re-trigger the halo. Mask follows the visible `panel.height` so input passes through outside the panel rect even when the surface is taller.
 
 ## Style + consistency
 
@@ -215,7 +226,7 @@ ANSI refs are for "I want a fixed hue" (git uses `p:yellow` so it contrasts with
 
 ### Buttons
 
-`CardButton.qml` is the single source of truth. Used everywhere: PowerMenu, Volume mute/transport, ThemeSwitcher reset, Calendar prev/next, Notifications close-X, workspace pills, etc.
+`CardButton.qml` is the single source of truth. Used everywhere: PowerMenu, Volume mute/transport, ThemeSwitcherContent reset, Calendar prev/next, Notifications close-X, workspace pills, etc.
 
 - Radius **12** (override to `height/2` for round).
 - Default fill `Qt.rgba(cFg…, 0.06)`; highlighted `0.18`. Default border `0.10`; highlighted `cPrimary`. Border 1 px, transitions 120 ms `ColorAnimation`.
@@ -245,7 +256,7 @@ Every bar icon with an associated popout/window opens it on **hover**. Click is 
 
 Two state machines:
 - **Bar popouts** — `popoutEnter(name, screen)` / `popoutLeave()`. Single global `_hoverDepth`, single 250 ms close timer, single `popoutCurrent` + `popoutOwner`.
-- **Standalone modals (launcher, ThemeSwitcher)** — same shape (depth counter, close timer at zero) but local state.
+- **EdgePopouts (top launcher/workspaces, bottom themes)** — same shape (depth counter, close timer at zero) but local state.
 
 ### Modals are stateless containers
 
@@ -255,7 +266,7 @@ Each `*Content.qml` is a plain `Item` with `implicitWidth`/`implicitHeight` and 
 
 | Tier | Duration | Curve | Used for |
 |---|---|---|---|
-| Panel reveal/morph | 280 ms | OutCubic | Popouts size+position, Modal open/close, ThemeSwitcher hover-expand |
+| Panel reveal/morph | 280 ms | OutCubic | Popouts size+position, Modal open/close, EdgePopouts peek↔expand |
 | Cross-icon close grace | 250 ms | — | Popout close timer (slightly less than panel anim, by design) |
 | Workspace pill width | 240 ms | OutCubic | active indicator |
 | Micro-interactions | 120 ms | ColorAnimation | hover tint, opacity, button hover |
