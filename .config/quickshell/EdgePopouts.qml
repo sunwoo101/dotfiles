@@ -61,6 +61,12 @@ Modal {
     property string ipcContentName: ""
     property bool ipcManaged: false
 
+    // Independent keyboard-focus path (no fullscreen, no click-catcher) —
+    // when current === kbdFocusName, set the layer's kbd focus mode.
+    // Used by MinigameContent to capture D/F/J/K input while playing.
+    property string kbdFocusName: ""
+    property bool kbdExclusive: true
+
     // workspace-thumb props passed straight through to a "workspaces"
     // entry (legacy carry-over so shell.qml doesn't have to thread them
     // through a Component-scope hop). Other content types ignore these.
@@ -169,8 +175,13 @@ Modal {
     // OnDemand when it's hover-summoned, None otherwise. Generalizes the
     // previous launcher-specific path: callers supply ipcContentName.
     WlrLayershell.keyboardFocus: {
-        if (current !== ipcContentName || ipcContentName === "") return WlrLayershell.None;
-        return ipcManaged ? WlrLayershell.Exclusive : WlrLayershell.OnDemand;
+        if (ipcContentName !== "" && current === ipcContentName) {
+            return ipcManaged ? WlrLayershell.Exclusive : WlrLayershell.OnDemand;
+        }
+        if (kbdFocusName !== "" && current === kbdFocusName) {
+            return kbdExclusive ? WlrLayershell.Exclusive : WlrLayershell.OnDemand;
+        }
+        return WlrLayershell.None;
     }
 
     Repeater {

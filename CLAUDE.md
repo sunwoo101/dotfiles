@@ -51,7 +51,7 @@ Bar.qml                  # top bar; exposes anchor X for each popout trigger
 Modal.qml                # base PanelWindow for standalone modals
 Popouts.qml              # wrapper hosting all bar popouts; SVG path adapts to edge state
 EdgePopouts.qml          # generic top/bottom edge wrapper with optional peek mode
-{Volume,Notifications,Calendar,PowerMenu,Tray,Workspaces,AppLauncher,ThemeSwitcher,Minigame}Content.qml
+{Volume,Notifications,Calendar,PowerMenu,Tray,Workspaces,AppLauncher,ThemeSwitcher,Minigame,Mania}Content.qml
 EdgeBumper.qml           # invisible hover trigger anchored to a screen edge
 Lock.qml                 # WlSessionLock screen with PamContext auth
 CardButton.qml           # reusable button surface
@@ -145,6 +145,10 @@ Generic Modal-based wrapper for top- or bottom-edge centered modals that host mu
 - **Scoring** — judgment by `dist = |1 - lifetime|`: Perfect (<0.08, 300 pts), Great (<0.18, 100), Good (<0.32, 50), else Miss (0). Combo bumps on every non-Miss; score per hit = `round(base × (1 + (combo - 1) × 0.05))`. Miss resets combo. Judgment indicator (`Text` floating up + fading out via `ParallelAnimation`) self-destroys via `onFinished: indicator.destroy()`.
 - **Timeout = Miss** — circle's lifetime `NumberAnimation onFinished` calls `judge(lifetime, x, y, expired=true)`; the same path the click MouseArea calls but forced to Miss.
 - **Anchor scope** — `active: minigameEdge.current === "minigame"` (NOT `shellRoot.bottomCurrent === "minigame" && bottomOwner === modelData.name`) — `modelData` doesn't reliably resolve across `Component { ... }` declaration boundaries inside Variants delegates, but the EdgePopouts instance ID does because each Variants delegate has its own scope.
+
+**ManiaContent** — bottom-right sibling, osu!mania-style 4-key falling-note game (D / F / J / K). Same resource gating, score reset, judgment tiers, and combo formula as MinigameContent. Notes fall via `NumberAnimation on y { from: -h; to: game.height }`; on `onFinished` (timeout) the same `judge()` path fires with `expired: true` for an automatic Miss. Stray keypresses (no live note within `goodWindow` of the judgment line) flash the keypad but do not break combo or fire a Miss.
+- **Keyboard focus** — needs the layer surface to hold kbd focus to receive D/F/J/K. EdgePopouts gained `kbdFocusName` + `kbdExclusive` (decoupled from `ipcContentName`/`ipcManaged`, which also carry a click-catcher / fullscreen mode that we don't want here): when `current === kbdFocusName`, set the layer's `WlrLayershell.keyboardFocus`. The mania edge sets `kbdFocusName: "mania"`, `kbdExclusive: true`. The gameplay `Item` sets `focus: true` and calls `forceActiveFocus()` in `Component.onCompleted` so Qt-level focus traversal lands on it as soon as the Loader instantiates.
+- **Anchor** — third bottom-edge wrapper. Themes is centered (`panelXOffset: 0`); minigame is `-(W + 596)/4` (mirror left), mania is `+(W + 596)/4` (mirror right). All three peek bars stay simultaneously visible at their fixed positions; the shared `bottomCurrent` + depth counter gives clean cross-bumper handoff.
 
 ### Adding a new bottom-edge popout
 

@@ -832,6 +832,46 @@ ShellRoot {
         }
     }
 
+    // Mania (osu!mania) — third bottom panel, mirror of minigame on the
+    // RIGHT of themes. Same gap math as minigame but reflected: panel
+    // center at (3W + 596) / 4, so panelXOffset = +(W + 596) / 4.
+    Variants {
+        model: _screensWhenReady
+        EdgePopouts {
+            id: maniaEdge
+            modelData: modelData
+            edge: "bottom"
+            cBg: shellRoot.cBg
+            peekHeight: 8
+            peekDefault: "mania"
+            // Grab kbd focus while playing so D/F/J/K hit the gameplay
+            // Item's Keys.onPressed instead of the focused app.
+            kbdFocusName: "mania"
+            kbdExclusive: true
+            panelXOffset: (width + 596) / 4
+            current: (shellRoot.bottomOwner === modelData.name && shellRoot.bottomCurrent === "mania")
+                ? "mania" : ""
+            onPanelEnter: shellRoot.bottomEnter("mania", modelData.name)
+            onPanelLeave: shellRoot.bottomLeave()
+            contents: [
+                { name: "mania", source: maniaContentComp },
+            ]
+
+            Component {
+                id: maniaContentComp
+                ManiaContent {
+                    cFg:                shellRoot.cFg
+                    cPrimary:           shellRoot.cPrimary
+                    cMuted:             shellRoot.cMuted
+                    fontFamily:         shellRoot.fontFamily
+                    panelVisibleHeight: maniaEdge.visibleHeight
+                    peekHeight:         maniaEdge.peekHeight
+                    active:             maniaEdge.current === "mania"
+                }
+            }
+        }
+    }
+
     // Themes bumper — centered hit zone matching ThemeSwitcher's panel width.
     Variants {
         model: _screensWhenReady
@@ -840,6 +880,22 @@ ShellRoot {
             edge: "bottom"
             hitWidth: 596    // matches ThemeSwitcherContent panel total width
             onBumperEnter: shellRoot.bottomEnter("themes", modelData.name)
+            onBumperLeave: shellRoot.bottomLeave()
+        }
+    }
+    // Mania bumper — centered in the gap right of themes. Mirror of the
+    // minigame bumper formula: hitX = themes-right-edge + (gap - hitWidth)/2.
+    Variants {
+        model: _screensWhenReady
+        EdgeBumper {
+            modelData: modelData
+            edge: "bottom"
+            hitWidth: 596
+            // Themes right edge = (W + 596)/2; available right gap width =
+            // (W - 596)/2; want hit zone centered in [themes-right, W].
+            // hitX = (W + 596)/2 + ((W - 596)/2 - 596)/2 = (3W - 596)/4.
+            hitX: (3 * width - 596) / 4
+            onBumperEnter: shellRoot.bottomEnter("mania", modelData.name)
             onBumperLeave: shellRoot.bottomLeave()
         }
     }
