@@ -1,0 +1,15 @@
+[Unit]
+Description=Stop graphical-session.target when Hyprland exits
+# Deliberately NOT PartOf= or BindsTo= graphical-session.target — this
+# service must outlive the target it stops. Default Slice= (app.slice)
+# is independent of graphical-session.target, unlike app-graphical.slice
+# where `uwsm app --` scopes live.
+
+[Service]
+Type=simple
+ExecStart=%h/.config/hypr/scripts/session-cleanup.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

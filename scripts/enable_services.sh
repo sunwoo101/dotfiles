@@ -16,6 +16,7 @@ systemctl --user daemon-reload
 
 echo "enabling user services"
 systemctl --user enable hyprpolkitagent.service
+systemctl --user enable hyprland-session-cleanup.service
 
 # populate ~/Documents, ~/Downloads, ~/Pictures, etc.
 echo "updating xdg user dirs"

@@ -54,12 +54,14 @@ done
 [ -f "$SESSION_DIR/hyprland.desktop" ] && sudo rm "$SESSION_DIR/hyprland.desktop"
 
 # ---- custom SDDM session dir ---------------------------------------------
+# Symlink to the package-shipped uwsm entry. SDDM is pointed at this dir
+# (instead of /usr/share/wayland-sessions/) so only the uwsm-managed
+# entry shows in the greeter — the plain hyprland.desktop stays hidden
+# without modifying package files.
 sudo mkdir -p "$SESSION_DIR"
-if [ ! -L "$SESSION_DIR/hyprland-uwsm.desktop" ]; then
-    sudo ln -sf /usr/share/wayland-sessions/hyprland-uwsm.desktop \
-        "$SESSION_DIR/hyprland-uwsm.desktop"
-    echo "linked hyprland-uwsm.desktop → $SESSION_DIR/"
-fi
+sudo ln -sfn /usr/share/wayland-sessions/hyprland-uwsm.desktop \
+    "$SESSION_DIR/hyprland-uwsm.desktop"
+echo "linked hyprland-uwsm.desktop → $SESSION_DIR/"
 
 sudo mkdir -p /etc/sddm.conf.d
 if [ ! -f "$SDDM_CONF" ]; then

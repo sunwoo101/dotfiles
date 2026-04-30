@@ -49,6 +49,7 @@
 - linux-headers
 - dkms
 - jq
+- socat
 - fd
 - fastfetch
 - mlocate
