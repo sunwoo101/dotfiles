@@ -174,7 +174,7 @@ Item {
                         : Qt.rgba(root.cFg.r, root.cFg.g, root.cFg.b, 0.06)
                     border.color: Qt.rgba(root.cFg.r, root.cFg.g, root.cFg.b, 0.10)
                     border.width: 1
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Anims.micro } }
 
                     HoverHandler { id: groupHover }
 

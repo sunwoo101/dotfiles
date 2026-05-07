@@ -1,0 +1,19 @@
+singleton Anims Anims.qml
+AppLauncherContent AppLauncherContent.qml
+Bar Bar.qml
+CalendarContent CalendarContent.qml
+CardButton CardButton.qml
+EdgeBumper EdgeBumper.qml
+EdgePopouts EdgePopouts.qml
+Lock Lock.qml
+ManiaContent ManiaContent.qml
+MinigameContent MinigameContent.qml
+Modal Modal.qml
+NotificationsContent NotificationsContent.qml
+Popouts Popouts.qml
+PowerMenuContent PowerMenuContent.qml
+ThemeSwitcherContent ThemeSwitcherContent.qml
+TintedIcon TintedIcon.qml
+TrayMenuContent TrayMenuContent.qml
+VolumeContent VolumeContent.qml
+WorkspacesContent WorkspacesContent.qml

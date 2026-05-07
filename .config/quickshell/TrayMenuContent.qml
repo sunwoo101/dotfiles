@@ -188,7 +188,7 @@ Item {
                                     ? Qt.rgba(root.cFg.r, root.cFg.g, root.cFg.b, 0.12)
                                     : "transparent"
                                 opacity: entryItem.isEnabled ? 1.0 : 0.45
-                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on color { ColorAnimation { duration: Anims.micro } }
 
                                 RowLayout {
                                     anchors.fill: parent

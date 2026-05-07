@@ -25,8 +25,8 @@ Rectangle {
         ? cPrimary
         : Qt.rgba(cFg.r, cFg.g, cFg.b, 0.10)
     border.width: 1
-    Behavior on color        { ColorAnimation { duration: 120 } }
-    Behavior on border.color { ColorAnimation { duration: 120 } }
+    Behavior on color        { ColorAnimation { duration: Anims.micro } }
+    Behavior on border.color { ColorAnimation { duration: Anims.micro } }
 
     default property alias content: slot.data
     Item {

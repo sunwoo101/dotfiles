@@ -201,7 +201,7 @@ Item {
                 ? root.cPrimary
                 : Qt.rgba(root.cFg.r, root.cFg.g, root.cFg.b, 0.10)
             border.width: 1
-            Behavior on border.color { ColorAnimation { duration: 120 } }
+            Behavior on border.color { ColorAnimation { duration: Anims.micro } }
 
             RowLayout {
                 anchors.fill: parent

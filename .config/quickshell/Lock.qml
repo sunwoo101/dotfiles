@@ -42,7 +42,7 @@ Item {
             target: lockRoot
             property: "bgOpacity"
             from: 0; to: 1
-            duration: 280
+            duration: Anims.panel
             easing.type: Easing.OutCubic
         }
         // 2. swap overlay → lock surface (both cBg, seamless)
@@ -52,7 +52,7 @@ Item {
             target: lockRoot
             property: "appearAmount"
             from: 0; to: 1
-            duration: 280
+            duration: Anims.panel
             easing.type: Easing.OutCubic
         }
     }
@@ -74,7 +74,7 @@ Item {
             target: lockRoot
             property: "bgOpacity"
             from: 1; to: 0
-            duration: 280
+            duration: Anims.panel
             easing.type: Easing.InCubic
         }
     }
@@ -204,7 +204,7 @@ Item {
                         ? lockRoot.cPrimary
                         : Qt.rgba(lockRoot.cFg.r, lockRoot.cFg.g, lockRoot.cFg.b, 0.12)
                     border.width: 1
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                    Behavior on border.color { ColorAnimation { duration: Anims.micro } }
 
                     TextInput {
                         id: pwInput

@@ -13,7 +13,7 @@ Item {
     id: root
 
     implicitWidth:  560
-    implicitHeight: 306
+    implicitHeight: 352
 
     required property color cFg
     required property color cPrimary
@@ -23,10 +23,12 @@ Item {
     required property var mochaAccents
     required property string currentFlavor
     required property real currentOpacity
+    required property real currentAnimSpeed
     required property var setAccent
     required property var toggleFlavor
     required property var clearOverride
     required property var setOpacity
+    required property var setAnimSpeed
 
     // Wrapper-driven values for the peek-fade ratio. panelVisibleHeight
     // is the wrapper's animated panel height; peekHeight is its resting
@@ -73,8 +75,8 @@ Item {
                     border.color: active ? root.cFg : "transparent"
                     border.width: active ? 3 : 0
 
-                    Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-                    Behavior on border.width { NumberAnimation { duration: 140 } }
+                    Behavior on scale { NumberAnimation { duration: Anims.accent; easing.type: Easing.OutQuad } }
+                    Behavior on border.width { NumberAnimation { duration: Anims.accent } }
 
                     MouseArea {
                         id: aMa
@@ -138,7 +140,7 @@ Item {
                     border.color: root.cPrimary
                     border.width: 2
 
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Anims.micro } }
                 }
             }
 
@@ -150,6 +152,72 @@ Item {
                 font.pixelSize: 13
                 font.family: root.fontFamily
                 width: 36
+            }
+        }
+
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 10
+            height: 32
+
+            Text {
+                height: parent.height
+                verticalAlignment: Text.AlignVCenter
+                text: "Animations"
+                color: root.cFg
+                font.pixelSize: 13
+                font.family: root.fontFamily
+            }
+
+            Slider {
+                id: animSlider
+                width: 240
+                height: parent.height
+                from: 0.1
+                to: 3.0
+                stepSize: 0.05
+                value: root.currentAnimSpeed
+
+                onPressedChanged: if (!pressed) root.setAnimSpeed(value)
+
+                background: Rectangle {
+                    x: animSlider.leftPadding
+                    y: animSlider.topPadding + animSlider.availableHeight / 2 - height / 2
+                    width: animSlider.availableWidth
+                    height: 4
+                    radius: 2
+                    color: Qt.rgba(root.cFg.r, root.cFg.g, root.cFg.b, 0.12)
+
+                    Rectangle {
+                        width: animSlider.visualPosition * parent.width
+                        height: parent.height
+                        radius: 2
+                        color: root.cPrimary
+                    }
+                }
+
+                handle: Rectangle {
+                    x: animSlider.leftPadding + animSlider.visualPosition * animSlider.availableWidth - width / 2
+                    y: animSlider.topPadding + animSlider.availableHeight / 2 - height / 2
+                    width: 16
+                    height: 16
+                    radius: 8
+                    color: animSlider.pressed ? root.cPrimary : root.cFg
+                    border.color: root.cPrimary
+                    border.width: 2
+
+                    Behavior on color { ColorAnimation { duration: Anims.micro } }
+                }
+            }
+
+            Text {
+                height: parent.height
+                verticalAlignment: Text.AlignVCenter
+                text: animSlider.value.toFixed(2) + "×"
+                color: root.cFg
+                font.pixelSize: 13
+                font.family: root.fontFamily
+                width: 40
             }
         }
 

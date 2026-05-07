@@ -126,6 +126,7 @@ ShellRoot {
     property string currentAccentHex: "#cba6f7"
     property string currentFlavor:    "mocha"   // "mocha" | "latte"
     property real   currentOpacity:   0.7
+    property real   currentAnimSpeed: 1.0
 
     // Rehydrate accent/flavor from the override file once on launch, then
     // re-run apply_palette.py so generated files (kitty/gtk/ohmyposh/etc.)
@@ -143,9 +144,12 @@ ShellRoot {
             ? over.ui.primary
             : currentAccentHex;
         var opacity = over && over.opacity && over.opacity.bg !== undefined
-            ? over.opacity.bg
-            : currentOpacity;
+            ? over.opacity.bg : currentOpacity;
+        var animSpeed = over && over.anim && over.anim.speed !== undefined
+            ? over.anim.speed : currentAnimSpeed;
         currentOpacity = opacity;
+        currentAnimSpeed = animSpeed;
+        Anims.multiplier = animSpeed;
         applyTheme(flavor, accent, hex);
     }
 
@@ -173,7 +177,8 @@ ShellRoot {
             currentFlavor,
             currentAccent,
             currentAccentHex,
-            currentOpacity.toString()
+            currentOpacity.toString(),
+            currentAnimSpeed.toString()
         ];
         writeOverride.running = true;
     }
@@ -181,11 +186,18 @@ ShellRoot {
         currentOpacity = val;
         applyPalette();
     }
+    function setAnimSpeed(val) {
+        currentAnimSpeed = val;
+        Anims.multiplier = val;
+        applyPalette();
+    }
     function clearOverride() {
         currentFlavor = "mocha";
         currentAccent = "mauve";
         currentAccentHex = "#cba6f7";
         currentOpacity = 0.7;
+        currentAnimSpeed = 1.0;
+        Anims.multiplier = 1.0;
         writeOverride.running = false;
         writeOverride.command = [
             "sh", "-c",
@@ -788,10 +800,12 @@ ShellRoot {
                     mochaAccents:       shellRoot.mochaAccents
                     currentFlavor:      shellRoot.currentFlavor
                     currentOpacity:     shellRoot.currentOpacity
+                    currentAnimSpeed:   shellRoot.currentAnimSpeed
                     setAccent:          (name, hex) => shellRoot.setAccent(name, hex)
                     toggleFlavor:       () => shellRoot.toggleFlavor()
                     clearOverride:      () => shellRoot.clearOverride()
                     setOpacity:         (val) => shellRoot.setOpacity(val)
+                    setAnimSpeed:       (val) => shellRoot.setAnimSpeed(val)
                     panelVisibleHeight: themesEdge.visibleHeight
                     peekHeight:         themesEdge.peekHeight
                 }

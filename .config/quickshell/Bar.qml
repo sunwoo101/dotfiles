@@ -183,7 +183,7 @@ PanelWindow {
                 tint: (powerMa.containsMouse || bar.powerOpen)
                     ? bar.cPrimary : bar.cFg
                 size: 20
-                Behavior on tint { ColorAnimation { duration: 120 } }
+                Behavior on tint { ColorAnimation { duration: Anims.micro } }
             }
 
             MouseArea {
@@ -206,7 +206,7 @@ PanelWindow {
             font.pixelSize: 16
             font.family: bar.fontFamily
             font.bold: true
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { ColorAnimation { duration: Anims.micro } }
 
             Timer {
                 interval: 1000
@@ -274,7 +274,7 @@ PanelWindow {
                     font.pixelSize: 20
                     color: (launcherMa.containsMouse || bar.launcherOpen)
                         ? bar.cPrimary : bar.cFg
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Anims.micro } }
                 }
 
                 MouseArea {
@@ -330,10 +330,10 @@ PanelWindow {
                             border.width: 1
 
                             Behavior on Layout.preferredWidth {
-                                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                                NumberAnimation { duration: Anims.pill; easing.type: Easing.OutCubic }
                             }
-                            Behavior on color        { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                            Behavior on color        { ColorAnimation { duration: Anims.micro } }
+                            Behavior on border.color { ColorAnimation { duration: Anims.micro } }
 
                             Text {
                                 anchors.centerIn: parent
@@ -343,7 +343,7 @@ PanelWindow {
                                 font.pixelSize: 15
                                 font.family: bar.fontFamily
                                 font.bold: true
-                                Behavior on opacity { NumberAnimation { duration: 120 } }
+                                Behavior on opacity { NumberAnimation { duration: Anims.micro } }
                             }
                         }
                     }
@@ -417,7 +417,7 @@ PanelWindow {
                         sourceSize.width:  trayItem.iconSize * 2
                         sourceSize.height: trayItem.iconSize * 2
                         opacity: trayMa.containsMouse ? 1.0 : 0.85
-                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        Behavior on opacity { NumberAnimation { duration: Anims.micro } }
                     }
 
                     // NeedsAttention dot — small cPrimary pulse below the
@@ -433,8 +433,8 @@ PanelWindow {
                         SequentialAnimation on opacity {
                             running: trayItem.needsAttention
                             loops: Animation.Infinite
-                            NumberAnimation { from: 1.0; to: 0.4; duration: 800; easing.type: Easing.InOutSine }
-                            NumberAnimation { from: 0.4; to: 1.0; duration: 800; easing.type: Easing.InOutSine }
+                            NumberAnimation { from: 1.0; to: 0.4; duration: Anims.pulse; easing.type: Easing.InOutSine }
+                            NumberAnimation { from: 0.4; to: 1.0; duration: Anims.pulse; easing.type: Easing.InOutSine }
                         }
                     }
 
@@ -494,7 +494,7 @@ PanelWindow {
                         ? bar.cPrimary : bar.cFg
                     size: 20
                     anchors.verticalCenter: parent.verticalCenter
-                    Behavior on tint { ColorAnimation { duration: 120 } }
+                    Behavior on tint { ColorAnimation { duration: Anims.micro } }
                 }
                 Text {
                     text: bar.volumeText
@@ -503,7 +503,7 @@ PanelWindow {
                     font.pixelSize: 15
                     font.family: bar.fontFamily
                     anchors.verticalCenter: parent.verticalCenter
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Anims.micro } }
                 }
             }
             MouseArea {
@@ -566,7 +566,7 @@ PanelWindow {
                         : ((bellMa.containsMouse || bar.notifOpen)
                             ? bar.cPrimary : bar.cFg)
                     size: 20
-                    Behavior on tint { ColorAnimation { duration: 120 } }
+                    Behavior on tint { ColorAnimation { duration: Anims.micro } }
                 }
                 Text {
                     visible: bar.notifCount > 0
@@ -575,7 +575,7 @@ PanelWindow {
                     font.pixelSize: 15
                     font.family: bar.fontFamily
                     font.bold: true
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Anims.micro } }
                 }
             }
             // Same trick as the power icon — extend the hit-box via

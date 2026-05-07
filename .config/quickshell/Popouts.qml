@@ -75,7 +75,7 @@ PanelWindow {
     readonly property int barHeight:    48
     readonly property int invRadius:    18
     readonly property int cornerRadius: 14
-    readonly property int animDuration: 280
+    readonly property int animDuration: Anims.panel
 
     // Only handle popouts that belong to OUR side.
     function _config(name) {

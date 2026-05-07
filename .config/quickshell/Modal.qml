@@ -32,7 +32,7 @@ PanelWindow {
     property int contentHeight: 200
     property int invRadius:     18
     property int cornerRadius:  16
-    property int animDuration:  280
+    property int animDuration:  Anims.panel
 
     // Toggle for the Behavior on `panel.width`. Subclasses that want to
     // snap width without animating (e.g. EdgePopouts on open-from-closed

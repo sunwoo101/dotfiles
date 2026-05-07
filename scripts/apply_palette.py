@@ -3,16 +3,17 @@
 flavor + accent combination.
 
 Usage:
-    apply_palette.py FLAVOR ACCENT_NAME ACCENT_HEX [OPACITY]
+    apply_palette.py FLAVOR ACCENT_NAME ACCENT_HEX [OPACITY [ANIM_SPEED]]
 
 FLAVOR        — "mocha" or "latte"
 ACCENT_NAME   — e.g. "mauve", "pink", "blue" (the catppuccin slot name)
 ACCENT_HEX    — "#cba6f7" (the accent color hex; same value across flavors)
 OPACITY       — float 0.0–1.0 for background transparency (default 0.7)
+ANIM_SPEED    — float multiplier for animation durations (default 1.0)
 
 The override is rebuilt fresh each call (no merging of stale fields). Override
 contains: theme.{gtk,cursor}, ui.{bg,mantle,fg,primary,accent,url,muted,border},
-opacity.bg, ansi.* (full 16-color palette flipped to match the flavor).
+opacity.bg, anim.speed, ansi.* (full 16-color palette flipped to match the flavor).
 """
 import json
 import pathlib
@@ -75,7 +76,7 @@ def light_tint(hex_str: str, f: float) -> str:
     return fmt_hex((mix(r), mix(g), mix(b)))
 
 
-def build_palette(flavor: str, accent_name: str, accent_hex: str, opacity: float = 0.7) -> dict:
+def build_palette(flavor: str, accent_name: str, accent_hex: str, opacity: float = 0.7, anim_speed: float = 1.0) -> dict:
     if flavor == "mocha":
         ui = {
             "bg":      dark_tint(accent_hex, 0.13),
@@ -108,23 +109,25 @@ def build_palette(flavor: str, accent_name: str, accent_hex: str, opacity: float
         },
         "ui":      ui,
         "opacity": {"bg": round(opacity, 3)},
+        "anim":    {"speed": round(anim_speed, 3)},
         "ansi":    ANSI[flavor],
     }
 
 
 def main() -> int:
-    if len(sys.argv) not in (4, 5):
+    if len(sys.argv) not in (4, 5, 6):
         sys.stderr.write(__doc__)
         return 2
 
     flavor, accent_name, accent_hex = sys.argv[1], sys.argv[2], sys.argv[3]
-    opacity = float(sys.argv[4]) if len(sys.argv) == 5 else 0.7
+    opacity    = float(sys.argv[4]) if len(sys.argv) >= 5 else 0.7
+    anim_speed = float(sys.argv[5]) if len(sys.argv) >= 6 else 1.0
 
     if flavor not in ANSI:
         sys.stderr.write(f"unknown flavor: {flavor} (expected mocha or latte)\n")
         return 2
 
-    palette = build_palette(flavor, accent_name, accent_hex, opacity)
+    palette = build_palette(flavor, accent_name, accent_hex, opacity, anim_speed)
 
     OVERRIDE.parent.mkdir(parents=True, exist_ok=True)
     OVERRIDE.write_text(json.dumps(palette, indent=2) + "\n")
