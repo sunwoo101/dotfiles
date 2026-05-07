@@ -35,8 +35,8 @@ Item {
         return "file://" + root.thumbDir + "/" + wsId + ".png";
     }
 
-    implicitWidth: row.implicitWidth + padding * 2
-    implicitHeight: thumbHeight + 32 + padding * 2   // thumb + label row + padding
+    implicitWidth:  row.implicitWidth  + padding * 2
+    implicitHeight: row.implicitHeight + padding * 2
 
     Row {
         id: row

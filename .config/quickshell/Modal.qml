@@ -267,6 +267,7 @@ PanelWindow {
             anchors.fill: parent
             anchors.leftMargin:  root.leftInverseWidth
             anchors.rightMargin: root.rightInverseWidth
+            clip: true
         }
     }
 
@@ -275,9 +276,10 @@ PanelWindow {
     // line + (optional) arc based on cornerType; uses safe-radius clamps so
     // very small heights don't produce malformed paths.
     readonly property string _svgPath: {
-        var W = panelTotalWidth;
-        // bind to panel.height (animated value) not _panelHeight (target),
-        // so the shape shrinks together with the panel rect.
+        // Both W and H use the animated panel values so the shape always
+        // matches the visible rect — never snaps to the target size ahead
+        // of the width/height Behaviors.
+        var W = panel.width;
         var H = panel.height;
         var R  = Math.min(invRadius,    H / 2);
         var bR = Math.min(cornerRadius, H / 2);

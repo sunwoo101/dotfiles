@@ -174,8 +174,8 @@ Item {
                 width: 240
                 height: parent.height
                 from: 0.1
-                to: 3.0
-                stepSize: 0.05
+                to: 5.0
+                stepSize: 0.1
                 value: root.currentAnimSpeed
 
                 onPressedChanged: if (!pressed) root.setAnimSpeed(value)

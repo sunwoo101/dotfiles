@@ -88,7 +88,8 @@ PanelWindow {
         if (name === "power" && side === "left")
             return { side: "left",  anchor: powerLeftX,   item: powerLoader.item };
         if (name && name.indexOf("tray:") === 0 && side === "right")
-            return { side: "right", anchor: trayItemRightX, item: trayLoader.item };
+            return { side: "right", anchor: trayItemRightX,
+                     item: root._traySlot === 0 ? trayLoaderA.item : trayLoaderB.item };
         return null;
     }
     // Index into SystemTray.items.values for the currently-hovered tray
@@ -103,48 +104,38 @@ PanelWindow {
         var items = SystemTray.items.values;
         return _trayIndex < items.length ? items[_trayIndex] : null;
     }
+
+    // Ping-pong tray slots — two loaders that cross-fade like every other
+    // content pair. _traySlot (0 or 1) tracks which is foreground; on each
+    // _trayIndex change we write the new item into the background slot then
+    // flip _traySlot so the Behavior on opacity handles the simultaneous
+    // fade-out / fade-in automatically.
+    property int _traySlot:  0
+    property var _trayItemA: null   // item shown by trayLoaderA
+    property var _trayItemB: null   // item shown by trayLoaderB
+
+    Connections {
+        target: root
+        function on_TrayIndexChanged() {
+            if (root._trayIndex >= 0) {
+                var other = 1 - root._traySlot;
+                if (other === 0) root._trayItemA = root._trayItem;
+                else             root._trayItemB = root._trayItem;
+                root._traySlot = other;
+            }
+            // leaving tray: opacity bindings drop both loaders to 0
+        }
+    }
+
     readonly property var curConfig: _config(current)
     readonly property bool _isOpen: curConfig !== null
     readonly property real _targetW: curConfig && curConfig.item ? curConfig.item.implicitWidth  : 0
-    // When an edge is flush, the bottom edge insets by invRadius for the
-    // cusp scoop — extend panel height so content keeps its full size.
-    readonly property real _targetH: curConfig && curConfig.item
-        ? curConfig.item.implicitHeight + ((_leftAtEdge || _rightAtEdge) ? invRadius : 0)
-        : 0
+    readonly property real _targetH: curConfig && curConfig.item ? curConfig.item.implicitHeight : 0
+    readonly property int  _panelWidth: _isOpen ? _targetW + 2 * invRadius : 0
 
-    // Edge detection: the "outer" side (opposite the anchor) is never at
-    // a screen edge in any reasonable layout, so derive from side+anchor
-    // only — avoids the circular dependency with panel.width.
-    readonly property bool _leftAtEdge:
-        curConfig && curConfig.side === "left"  && Math.abs(curConfig.anchor) < 1
-    readonly property bool _rightAtEdge:
-        curConfig && curConfig.side === "right" && Math.abs(curConfig.anchor - root.width) < 1
-
-    // Panel width = content width + invRadius for each non-flush top corner.
-    readonly property int _panelWidth: _isOpen
-        ? _targetW
-            + (_leftAtEdge  ? 0 : invRadius)
-            + (_rightAtEdge ? 0 : invRadius)
-        : 0
-
-    // The anchor X passed in (volumeRightX, clockLeftX, etc.) is the icon
-    // edge — the edge of the *visible body*. Outside that, the panel
-    // extends by invRadius for the carved corner. So when we position
-    // panel.x, we add invRadius on the anchor side so the body edge,
-    // not the outer panel edge, lines up with the icon edge.
-    readonly property int _anchorInset: {
-        if (!curConfig) return 0;
-        if (curConfig.side === "right") return _rightAtEdge ? 0 : invRadius;
-        if (curConfig.side === "left")  return _leftAtEdge  ? 0 : invRadius;
-        return 0;
-    }
-
-    // _activeAnchor is the panel's anchor edge X. It must stay pinned
-    // during open and close (right edge fixed at volumeRightX while
-    // width grows/shrinks), and animate during a switch between two
-    // popouts on the same side (volume → notif). We can't get this with
-    // a plain Behavior — opening would animate the anchor from 0/last
-    // and the panel would visibly slide in. Manage it imperatively.
+    // _activeAnchor is the panel EDGE X (right edge for right-side panels,
+    // left edge for left-side). Always offset by invRadius from the content
+    // anchor so the corner overhang is consistent on both sides.
     property real _activeAnchor: 0
     property var _prevCur: null
     Behavior on _activeAnchor {
@@ -188,19 +179,18 @@ PanelWindow {
             // surface only collapses to 0 after a full close (timer below).
             _surfaceCollapseTimer.stop();
             if (root._targetH > root._surfaceH) root._surfaceH = root._targetH;
+            var panelAnchor = (cur.side === "right")
+                ? cur.anchor + root.invRadius
+                : cur.anchor - root.invRadius;
             if (!prev) {
-                // opening from closed — snap to the screen edge first (so
-                // we don't animate from wherever we last closed), then
-                // animate to the target. The two assignments inside the
-                // same handler trigger the Behavior on the second one.
+                // opening from closed — snap to screen edge, then animate to target
                 _anchorBehavior.enabled = false;
                 root._activeAnchor = screenEdge;
                 _anchorBehavior.enabled = true;
-                root._activeAnchor = cur.anchor;
+                root._activeAnchor = panelAnchor;
                 return;
             }
-            // switching between two popouts on the same side — animate.
-            root._activeAnchor = cur.anchor;
+            root._activeAnchor = panelAnchor;
         }
     }
 
@@ -252,15 +242,14 @@ PanelWindow {
     Item {
         id: panel
 
-        // x is bound to (anchor - live width) for right side, or just
-        // anchor for left side. There's NO Behavior on x — instead, x
-        // tracks panel.width which has the Behavior. So as width grows
-        // 0 → target via the animation, x = anchor - width follows
-        // naturally; the anchor edge stays put and the panel grows
-        // away from it.
+        // x derived from _activeAnchor (panel edge) and animated width.
+        // No Behavior on x — it tracks panel.width which has the Behavior,
+        // so as width grows 0 → target, x follows and the panel edge stays
+        // pinned. _activeAnchor is the panel right edge (right side) or left
+        // edge (left side), so no offset term is needed here.
         x: root.side === "right"
-            ? root._activeAnchor - panel.width + root._anchorInset
-            : root._activeAnchor - root._anchorInset
+            ? root._activeAnchor - panel.width
+            : root._activeAnchor
         width:  root._panelWidth
         height: root._innerH
         anchors.top: parent.top
@@ -285,8 +274,8 @@ PanelWindow {
         Item {
             id: contentArea
             anchors.fill: parent
-            anchors.leftMargin:  root._leftAtEdge  ? 0 : root.invRadius
-            anchors.rightMargin: root._rightAtEdge ? 0 : root.invRadius
+            anchors.leftMargin:  root.invRadius
+            anchors.rightMargin: root.invRadius
             // Clip to the Shape's body region (panel rect minus inverse-corner
             // insets). Loaders inside are anchored to one edge with a fixed
             // implicitWidth — when the panel morphs to a narrower target,
@@ -348,32 +337,54 @@ PanelWindow {
                     now:              root.now
                     expireCallback:   root.expireCallback
                     clearAllCallback: root.clearAllCallback
-                    hovered:          root.current === "notifications" && root.interactive
+                    hovered:          root.current === "notifications" ? root.interactive : notifLoader.opacity > 0
                     cFg:              root.cFg
                     cPrimary:         root.cPrimary
                     cMuted:           root.cMuted
                     fontFamily:       root.fontFamily
                 }
             }
-            // Tray menu — single Loader handles every tray:N popout. The
-            // trayItem prop picks up which item to render based on the
-            // current popout name; switching between tray icons morphs
-            // anchor + width but keeps the same Loader instance.
+            // Tray menu — two loaders that cross-fade like every other content
+            // pair. _traySlot picks which is foreground; opacity Behaviors
+            // handle the simultaneous fade-in / fade-out.
             Loader {
-                id: trayLoader
+                id: trayLoaderA
                 anchors.right: parent.right
                 anchors.top:   parent.top
                 width:  item ? item.implicitWidth  : 0
                 height: item ? item.implicitHeight : 0
                 active: root.side === "right"
-                opacity: root._trayIndex >= 0 ? 1 : 0
-                enabled: root._trayIndex >= 0
-                z: root._trayIndex >= 0 ? 1 : 0
+                opacity: root._traySlot === 0 && root._trayIndex >= 0 ? 1 : 0
+                enabled: root._traySlot === 0 && root._trayIndex >= 0
+                z: root._traySlot === 0 && root._trayIndex >= 0 ? 1 : 0
                 Behavior on opacity {
                     NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
                 }
                 sourceComponent: TrayMenuContent {
-                    trayItem:   root._trayItem
+                    trayItem:   root._trayItemA
+                    cBg:        root.cBg
+                    cFg:        root.cFg
+                    cPrimary:   root.cPrimary
+                    cMuted:     root.cMuted
+                    fontFamily: root.fontFamily
+                    onRequestClose: root.requestClose()
+                }
+            }
+            Loader {
+                id: trayLoaderB
+                anchors.right: parent.right
+                anchors.top:   parent.top
+                width:  item ? item.implicitWidth  : 0
+                height: item ? item.implicitHeight : 0
+                active: root.side === "right"
+                opacity: root._traySlot === 1 && root._trayIndex >= 0 ? 1 : 0
+                enabled: root._traySlot === 1 && root._trayIndex >= 0
+                z: root._traySlot === 1 && root._trayIndex >= 0 ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animDuration; easing.type: Easing.OutCubic }
+                }
+                sourceComponent: TrayMenuContent {
+                    trayItem:   root._trayItemB
                     cBg:        root.cBg
                     cFg:        root.cFg
                     cPrimary:   root.cPrimary
@@ -428,53 +439,19 @@ PanelWindow {
         }
     }
 
-    // -- SVG path: clockwise from TL. Inverse top corners + rounded
-    // bottom corners on sides not at a screen edge. On sides that are
-    // at a screen edge, the side is flush and gets an inverse scoop at
-    // the bottom (tucking into the screen corner). Three real cases:
-    //   both-sides-inverse (volume, calendar)
-    //   right at edge       (notifications: TR flush, BR inverse scoop)
-    //   left  at edge       (power: TL flush, BL inverse scoop)
+    // -- SVG path: TL + TR inverse cusps, BL + BR rounded corners, no edge cases.
     readonly property string _svgPath: {
-        var W = panel.width;
-        var H = panel.height;
+        var W  = panel.width;
+        var H  = panel.height;
         var R  = Math.min(invRadius,    H / 2);
         var bR = Math.min(cornerRadius, H / 2);
-        var L = root._leftAtEdge;
-        var Re = root._rightAtEdge;
-        // edge-flush cases inset the bottom edge by R so the cusp-style
-        // inverse scoop has somewhere to tuck (mirrors TR/TL pattern)
-        var bottomY = (Re || L) ? (H - R) : H;
-
-        var p = "M 0 0 ";
-        p += "L " + W + " 0 ";
-
-        if (Re) {
-            // right flush down to (W, H) cusp, arc up-left to inset bottom
-            p += "L " + W + " " + H + " ";
-            p += "A " + R + " " + R + " 0 0 0 " + (W - R) + " " + (H - R) + " ";
-        } else {
-            // TR inverse cusp + inset right edge + BR rounded
-            p += "A " + R + " " + R + " 0 0 0 " + (W - R) + " " + R + " ";
-            p += "L " + (W - R) + " " + (bottomY - bR) + " ";
-            p += "A " + bR + " " + bR + " 0 0 1 " + (W - R - bR) + " " + bottomY + " ";
-        }
-
-        var bottomEndX = L ? R : (R + bR);
-        p += "L " + bottomEndX + " " + bottomY + " ";
-
-        if (L) {
-            // arc from inset bottom down-left to (0, H) cusp, then left flush
-            p += "A " + R + " " + R + " 0 0 0 0 " + H + " ";
-            p += "L 0 0 ";
-        } else {
-            // BL rounded + inset left edge + TL inverse cusp
-            p += "A " + bR + " " + bR + " 0 0 1 " + R + " " + (bottomY - bR) + " ";
-            p += "L " + R + " " + R + " ";
-            p += "A " + R + " " + R + " 0 0 0 0 0 ";
-        }
-
-        p += "Z";
-        return p;
+        return "M 0 0 L " + W + " 0 "
+            + "A " + R  + " " + R  + " 0 0 0 " + (W-R)     + " " + R      + " "
+            + "L " + (W-R)     + " " + (H-bR)  + " "
+            + "A " + bR + " " + bR + " 0 0 1 " + (W-R-bR)  + " " + H      + " "
+            + "L " + (R+bR)    + " " + H        + " "
+            + "A " + bR + " " + bR + " 0 0 1 " + R          + " " + (H-bR) + " "
+            + "L " + R         + " " + R         + " "
+            + "A " + R  + " " + R  + " 0 0 0 0 0 Z";
     }
 }

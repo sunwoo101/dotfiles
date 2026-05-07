@@ -6,8 +6,8 @@ CardButton CardButton.qml
 EdgeBumper EdgeBumper.qml
 EdgePopouts EdgePopouts.qml
 Lock Lock.qml
-ManiaContent ManiaContent.qml
-MinigameContent MinigameContent.qml
+ManiaGameContent ManiaGameContent.qml
+StandardGameContent StandardGameContent.qml
 Modal Modal.qml
 NotificationsContent NotificationsContent.qml
 Popouts Popouts.qml

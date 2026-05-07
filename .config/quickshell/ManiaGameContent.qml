@@ -1,9 +1,9 @@
-// ManiaContent — osu!mania-style 4-key falling-note game.
+// ManiaGameContent — osu!mania-style 4-key falling-note game.
 //
 // Notes (rectangles) fall in 4 columns; press D / F / J / K when a note's
 // center crosses the judgment line. Timing-based scoring with combo
 // multiplier. Same resource-gating + score-reset model as
-// MinigameContent: gameplay subtree lives in a Loader gated on `active`,
+// StandardGameContent: gameplay subtree lives in a Loader gated on `active`,
 // score zeroed every reload via the gameplay Item's onCompleted.
 //
 // Keyboard input requires the wrapper EdgePopouts to set
@@ -46,7 +46,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            text: "Press D F J K"
+            text: "osu Mania"
             color: root.cFg
             font.pixelSize: 17
             font.family: root.fontFamily

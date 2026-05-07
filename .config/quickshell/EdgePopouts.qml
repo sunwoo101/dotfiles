@@ -63,7 +63,7 @@ Modal {
 
     // Independent keyboard-focus path (no fullscreen, no click-catcher) —
     // when current === kbdFocusName, set the layer's kbd focus mode.
-    // Used by MinigameContent to capture D/F/J/K input while playing.
+    // Used by StandardGameContent to capture D/F/J/K input while playing.
     property string kbdFocusName: ""
     property bool kbdExclusive: true
 
@@ -191,7 +191,10 @@ Modal {
             id: contentLoader
             required property var modelData
 
-            anchors.fill: parent
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            width:  item ? item.implicitWidth  : 0
+            height: item ? item.implicitHeight : 0
             active: true
             opacity: root.current === modelData.name ? 1 : 0
             // Disable input when not active — clicks would otherwise pass

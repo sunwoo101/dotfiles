@@ -21,7 +21,6 @@ PanelWindow {
 
     required property string volumeText
     required property string batteryText
-    required property bool   btConnected
     required property int    notifCount
     required property bool   notifMuted
     required property bool   notifOpen
@@ -443,8 +442,8 @@ PanelWindow {
                         anchors.fill: parent
                         anchors.topMargin: -(bar.barHeight - trayItem.iconSize) / 2
                         anchors.bottomMargin: -(bar.barHeight - trayItem.iconSize) / 2
-                        anchors.leftMargin: -4
-                        anchors.rightMargin: -4
+                        anchors.leftMargin: -5
+                        anchors.rightMargin: -5
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
@@ -511,7 +510,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.topMargin: -(bar.barHeight - volRow.implicitHeight) / 2
                 anchors.bottomMargin: -(bar.barHeight - volRow.implicitHeight) / 2
-                anchors.leftMargin: -8
+                anchors.leftMargin: -11
                 anchors.rightMargin: -8
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
@@ -520,12 +519,6 @@ PanelWindow {
             }
         }
 
-        TintedIcon {
-            name: "bluetooth-active-symbolic"
-            tint: bar.cFg
-            size: 20
-            visible: bar.btConnected
-        }
 
         Row {
             spacing: 6

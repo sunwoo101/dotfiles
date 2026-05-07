@@ -224,10 +224,9 @@ ShellRoot {
     ]
 
     // -- system module polling -------------------------------------------
-    // Volume is reactive via Pipewire service — no polling. Battery and
-    // bluetooth still poll because we don't have reactive sources wired up.
+    // Volume is reactive via Pipewire service — no polling. Battery polls
+    // because we don't have a reactive source wired up.
     property string batteryText: ""
-    property bool   btConnected: false
 
     readonly property var _sink: Pipewire.defaultAudioSink
     PwObjectTracker { objects: _sink ? [_sink] : [] }
@@ -240,10 +239,7 @@ ShellRoot {
     Timer {
         interval: 2000
         running: true; repeat: true; triggeredOnStart: true
-        onTriggered: {
-            pollBattery.running = true;
-            pollBluetooth.running = true;
-        }
+        onTriggered: pollBattery.running = true
     }
     Process {
         id: pollBattery
@@ -253,12 +249,6 @@ ShellRoot {
             "s=$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1); " +
             "[ -n \"$p\" ] && printf '%s%%%s' \"$p\" \"$([ \"$s\" = Charging ] && echo ' ⚡')\" || echo ''"]
         stdout: StdioCollector { onStreamFinished: shellRoot.batteryText = text.trim() }
-    }
-    Process {
-        id: pollBluetooth
-        running: false
-        command: ["sh", "-c", "bluetoothctl info 2>/dev/null | head -1"]
-        stdout: StdioCollector { onStreamFinished: shellRoot.btConnected = text.includes("Device") }
     }
 
     // -- workspace thumbnails --------------------------------------------
@@ -655,7 +645,6 @@ ShellRoot {
             fontFamily: shellRoot.fontFamily
             volumeText: shellRoot.volumeText
             batteryText: shellRoot.batteryText
-            btConnected: shellRoot.btConnected
             notifCount: notifSrv.trackedNotifications.values.length
             notifMuted: shellRoot.notifMuted
             notifOpen:    shellRoot.notifOpen
@@ -839,7 +828,7 @@ ShellRoot {
 
             Component {
                 id: minigameContentComp
-                MinigameContent {
+                StandardGameContent {
                     cFg:                shellRoot.cFg
                     cPrimary:           shellRoot.cPrimary
                     cMuted:             shellRoot.cMuted
@@ -849,7 +838,7 @@ ShellRoot {
                     // Run the game only while the window is fully open;
                     // peek collapses unload the gameplay Loader entirely
                     // (timers + animations destroyed). Score persists
-                    // across reopen on MinigameContent itself.
+                    // across reopen on StandardGameContent itself.
                     // Use minigameEdge.current rather than shellRoot
                     // bottomCurrent + bottomOwner so we don't have to
                     // resolve modelData across Component boundaries.
@@ -874,7 +863,7 @@ ShellRoot {
             // Grab kbd focus while playing so D/F/J/K hit the gameplay
             // Item's Keys.onPressed instead of the focused app.
             kbdFocusName: "mania"
-            kbdExclusive: true
+            kbdExclusive: false
             panelXOffset: (width + 596) / 4
             current: (shellRoot.bottomOwner === modelData.name && shellRoot.bottomCurrent === "mania")
                 ? "mania" : ""
@@ -886,7 +875,7 @@ ShellRoot {
 
             Component {
                 id: maniaContentComp
-                ManiaContent {
+                ManiaGameContent {
                     cFg:                shellRoot.cFg
                     cPrimary:           shellRoot.cPrimary
                     cMuted:             shellRoot.cMuted
@@ -934,7 +923,7 @@ ShellRoot {
         EdgeBumper {
             modelData: modelData
             edge: "bottom"
-            hitWidth: 596    // = MinigameContent panel total width
+            hitWidth: 596    // = StandardGameContent panel total width
             hitX: (width - 1788) / 4
             onBumperEnter: shellRoot.bottomEnter("minigame", modelData.name)
             onBumperLeave: shellRoot.bottomLeave()

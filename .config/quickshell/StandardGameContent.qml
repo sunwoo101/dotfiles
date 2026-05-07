@@ -1,4 +1,4 @@
-// MinigameContent — tiny osu-style rhythm game.
+// StandardGameContent — tiny osu-style rhythm game.
 //
 // Hit circles spawn at non-overlapping random positions; an approach
 // circle shrinks toward the hit circle. Click as the approach circle
@@ -55,7 +55,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            text: "Click the Circles"
+            text: "osu Standard"
             color: root.cFg
             font.pixelSize: 17
             font.family: root.fontFamily
