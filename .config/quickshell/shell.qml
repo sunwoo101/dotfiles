@@ -125,6 +125,7 @@ ShellRoot {
     property string currentAccent:    "mauve"
     property string currentAccentHex: "#cba6f7"
     property string currentFlavor:    "mocha"   // "mocha" | "latte"
+    property real   currentOpacity:   0.7
 
     // Rehydrate accent/flavor from the override file once on launch, then
     // re-run apply_palette.py so generated files (kitty/gtk/ohmyposh/etc.)
@@ -141,6 +142,10 @@ ShellRoot {
         var hex    = over && over.ui && over.ui.primary
             ? over.ui.primary
             : currentAccentHex;
+        var opacity = over && over.opacity && over.opacity.bg !== undefined
+            ? over.opacity.bg
+            : currentOpacity;
+        currentOpacity = opacity;
         applyTheme(flavor, accent, hex);
     }
 
@@ -167,14 +172,20 @@ ShellRoot {
             Quickshell.env("HOME") + "/dotfiles/scripts/apply_palette.py",
             currentFlavor,
             currentAccent,
-            currentAccentHex
+            currentAccentHex,
+            currentOpacity.toString()
         ];
         writeOverride.running = true;
+    }
+    function setOpacity(val) {
+        currentOpacity = val;
+        applyPalette();
     }
     function clearOverride() {
         currentFlavor = "mocha";
         currentAccent = "mauve";
         currentAccentHex = "#cba6f7";
+        currentOpacity = 0.7;
         writeOverride.running = false;
         writeOverride.command = [
             "sh", "-c",
@@ -776,9 +787,11 @@ ShellRoot {
                     fontFamily:         shellRoot.fontFamily
                     mochaAccents:       shellRoot.mochaAccents
                     currentFlavor:      shellRoot.currentFlavor
+                    currentOpacity:     shellRoot.currentOpacity
                     setAccent:          (name, hex) => shellRoot.setAccent(name, hex)
                     toggleFlavor:       () => shellRoot.toggleFlavor()
                     clearOverride:      () => shellRoot.clearOverride()
+                    setOpacity:         (val) => shellRoot.setOpacity(val)
                     panelVisibleHeight: themesEdge.visibleHeight
                     peekHeight:         themesEdge.peekHeight
                 }

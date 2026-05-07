@@ -1,16 +1,11 @@
 [Default Applications]
-# web / urls
 text/html=google-chrome.desktop
 application/xhtml+xml=google-chrome.desktop
 x-scheme-handler/http=google-chrome.desktop
 x-scheme-handler/https=google-chrome.desktop
 x-scheme-handler/about=google-chrome.desktop
 x-scheme-handler/unknown=google-chrome.desktop
-
-# file manager
 inode/directory=org.gnome.Nautilus.desktop
-
-# images
 image/png=org.gnome.Loupe.desktop
 image/jpeg=org.gnome.Loupe.desktop
 image/gif=org.gnome.Loupe.desktop
@@ -18,27 +13,24 @@ image/webp=org.gnome.Loupe.desktop
 image/bmp=org.gnome.Loupe.desktop
 image/tiff=org.gnome.Loupe.desktop
 image/svg+xml=org.gnome.Loupe.desktop
-
-# video
 video/mp4=io.github.celluloid_player.Celluloid.desktop
 video/x-matroska=io.github.celluloid_player.Celluloid.desktop
 video/webm=io.github.celluloid_player.Celluloid.desktop
 video/quicktime=io.github.celluloid_player.Celluloid.desktop
 video/x-msvideo=io.github.celluloid_player.Celluloid.desktop
 video/mpeg=io.github.celluloid_player.Celluloid.desktop
-
-# audio
 audio/mpeg=io.github.celluloid_player.Celluloid.desktop
 audio/flac=io.github.celluloid_player.Celluloid.desktop
 audio/ogg=io.github.celluloid_player.Celluloid.desktop
 audio/wav=io.github.celluloid_player.Celluloid.desktop
-
-# text / code
 text/plain=neovide.desktop
 text/markdown=neovide.desktop
 application/json=neovide.desktop
 application/x-yaml=neovide.desktop
-
-# pdf — chrome handles them
 application/pdf=google-chrome.desktop
 x-scheme-handler/claude-cli=claude-code-url-handler.desktop
+x-scheme-handler/tonsite=org.telegram.desktop.desktop
+x-scheme-handler/mailto=google-chrome.desktop
+
+[Added Associations]
+x-scheme-handler/tonsite=org.telegram.desktop.desktop;

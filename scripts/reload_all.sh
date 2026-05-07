@@ -12,12 +12,18 @@ set -uo pipefail
 # socket names, so we iterate every running kitty's per-pid socket. only kitty
 # windows launched AFTER those settings were added will respond.
 if command -v kitty >/dev/null 2>&1 && pgrep -x kitty >/dev/null; then
+    _kitty_opacity=$(awk '/^background_opacity/{print $2; exit}' "$HOME/.config/colors.conf")
     for pid in $(pgrep -x kitty); do
         if kitty @ --to=unix:@mykitty-$pid set-colors --all --configured \
                 "$HOME/.config/colors.conf" 2>/dev/null; then
             echo "kitty[$pid]: colors reloaded"
         else
             echo "kitty[$pid]: failed (started before remote control was on?)"
+        fi
+        if [[ -n "$_kitty_opacity" ]]; then
+            kitty @ --to=unix:@mykitty-$pid set-background-opacity "$_kitty_opacity" 2>/dev/null \
+                && echo "kitty[$pid]: opacity set to $_kitty_opacity" \
+                || true
         fi
     done
 fi
