@@ -22,6 +22,9 @@ sudo rm -rf "$DEST"
 sudo mkdir -p "$DEST"
 sudo cp -a "$SRC"/. "$DEST"/
 sudo chown -R root:root "$DEST"
+# theme.conf is regenerated on every accent/opacity change; let the active user
+# overwrite it without sudo so the apply chain can sync it live.
+sudo chown "$USER":root "$DEST/theme.conf"
 
 sudo mkdir -p /etc/sddm.conf.d
 if [ ! -f "$SDDM_THEME_CONF" ] || ! grep -q '^Current=dotfiles$' "$SDDM_THEME_CONF"; then

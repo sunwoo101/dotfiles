@@ -267,4 +267,13 @@ if os.path.isdir(sddm_theme_dir):
         f.write("fontFamily=JetBrainsMono Nerd Font\n")
 PY
 
+# Sync theme.conf to the installed SDDM location if it's writable by the
+# current user (install_sddm_theme.sh chowns it to $USER after copying).
+SDDM_INSTALLED=/usr/share/sddm/themes/dotfiles/theme.conf
+SDDM_SRC="$DOTFILES/sddm-theme/dotfiles/theme.conf"
+if [ -f "$SDDM_INSTALLED" ] && [ -w "$SDDM_INSTALLED" ] && [ -f "$SDDM_SRC" ]; then
+    cp "$SDDM_SRC" "$SDDM_INSTALLED"
+    echo "synced sddm theme.conf to $SDDM_INSTALLED"
+fi
+
 echo "generated configs from colors.json"
