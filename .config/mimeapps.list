@@ -31,6 +31,7 @@ application/pdf=google-chrome.desktop
 x-scheme-handler/claude-cli=claude-code-url-handler.desktop
 x-scheme-handler/tonsite=org.telegram.desktop.desktop
 x-scheme-handler/mailto=google-chrome.desktop
+x-scheme-handler/antigravity=antigravity.desktop
 
 [Added Associations]
 x-scheme-handler/tonsite=org.telegram.desktop.desktop;
