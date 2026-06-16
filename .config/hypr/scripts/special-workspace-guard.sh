@@ -113,7 +113,7 @@ log() {
 declare -A pinned=(
     ["kitty-special"]="special:term"
     ["discord"]="special:discord"
-    ["Spotify"]="special:spotify"
+    ["spotify"]="special:spotify"
     ["Docker Desktop"]="special:docker"
     ["GitHub Desktop"]="special:github"
     ["livepaper"]="special:livepaper"
