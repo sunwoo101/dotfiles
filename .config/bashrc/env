@@ -3,3 +3,4 @@ export BROWSER=google-chrome-stable
 export EDITOR=nvim
 export VISUAL=nvim
 export TERMINAL=kitty
+export SUDO_EDITOR=nvim
