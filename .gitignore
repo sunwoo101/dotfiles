@@ -11,3 +11,11 @@
 .config/hypr/conf/colors.conf
 home/.gtkrc-2.0
 sddm-theme/dotfiles/theme.conf
+
+# user/machine state, not configuration. rewritten by applications or
+# containing absolute $HOME paths, so tracking them produces diffs nobody
+# authored and values that don't port to another machine.
+.config/mimeapps.list
+.config/gtk-3.0/bookmarks
+.config/systemd/user/tiaga-link.service
+.config/systemd/user/default.target.wants/tiaga-link.service

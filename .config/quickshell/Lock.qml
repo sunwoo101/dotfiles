@@ -14,6 +14,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Pam
 
@@ -84,6 +85,19 @@ Item {
         appearAmount = 0;
         bgOpacity = 0;
         lockSeq.start();
+    }
+
+    // Power actions available without unlocking. Same command set as
+    // PowerMenuContent minus Lock (already locked) and Logout (would tear
+    // down the session out from under the lock surface).
+    Process {
+        id: powerCmd
+        running: false
+    }
+    function runPower(args) {
+        powerCmd.running = false;
+        powerCmd.command = args;
+        powerCmd.running = true;
     }
 
     PamContext {
@@ -254,6 +268,45 @@ Item {
                     font.family: lockRoot.fontFamily
                     font.pixelSize: 14
                     visible: lockRoot.errorMsg.length > 0
+                }
+
+                // Power actions. Round CardButtons, icon-only — placed below
+                // the input so they can't be fat-fingered while reaching for
+                // Enter. Disabled mid-auth so a click can't race PAM.
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 8
+                    spacing: 12
+
+                    Repeater {
+                        model: [
+                            { icon: "system-hibernate-symbolic", cmd: ["systemctl", "hibernate"] },
+                            { icon: "system-reboot-symbolic",    cmd: ["systemctl", "reboot"]    },
+                            { icon: "system-shutdown-symbolic",  cmd: ["systemctl", "poweroff"]  }
+                        ]
+
+                        CardButton {
+                            required property var modelData
+                            implicitWidth: 44
+                            implicitHeight: 44
+                            radius: height / 2
+                            cFg: lockRoot.cFg
+                            cPrimary: lockRoot.cPrimary
+                            enabled: !lockRoot.authenticating
+                            opacity: lockRoot.authenticating ? 0.4 : 1
+                            Behavior on opacity { NumberAnimation { duration: Anims.micro } }
+                            onClicked: lockRoot.runPower(modelData.cmd)
+
+                            TintedIcon {
+                                anchors.centerIn: parent
+                                name: modelData.icon
+                                iconBase: Quickshell.env("HOME")
+                                    + "/.local/share/icons/Colloid-Dark/actions/symbolic/"
+                                tint: lockRoot.cFg
+                                size: 20
+                            }
+                        }
+                    }
                 }
             }
         }

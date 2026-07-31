@@ -125,6 +125,10 @@ dotfiles/
 ## Conventions
 
 - Generated files are gitignored; source + scripts are tracked.
+- User/machine state is gitignored too (`mimeapps.list`, `gtk-3.0/bookmarks`) — apps
+  rewrite it behind your back and it carries absolute `$HOME` paths. Reproducible
+  defaults belong in a `scripts/` step (e.g. `xdg-mime default`), not a tracked
+  mutable file.
 - Script naming: `verb_object`. Each does one thing, runnable on its own.
 - Override-first edits: settings UI writes override, never base.
 - Live reload first, restart fallback. Document where impossible (GTK).

@@ -130,6 +130,27 @@ Thumbnails: PNGs at `$XDG_RUNTIME_DIR/quickshell/workspace-thumbs/<id>.png`, cap
 
 IPC: `qs ipc call launcher show|hide|toggle`. Fuzzy search with frecency boost. Frecency at `~/.cache/quickshell/launcher-frecency.json`. Focus grabbed via 60 ms timer after surface maps.
 
+## Lock
+
+Trigger: `qs ipc call lock lock` (PowerMenu Lock button, `$mainMod CTRL/ALT + L`)
+or `shellRoot.lockObj.lock()`.
+
+**Power actions on the lock surface** — hibernate / reboot / shutdown, as round
+44 px `CardButton`s (`radius: height / 2`), icon-only, below the password input.
+Placement is deliberate: above the input they'd be hit while reaching for Enter.
+`enabled: false` + 0.4 opacity while `authenticating` so a click can't race PAM.
+No Lock entry (already locked) and no Logout (tears down the session under the
+lock surface).
+
+**Don't lock from the sleep hook.** `/usr/local/bin/suspend-hyprland.sh`
+`killall -STOP Hyprland` before suspend/hibernate as an NVIDIA workaround.
+Engaging `ext-session-lock` immediately before that SIGSTOP leaves the lock
+surface mid-commit, and it comes back frozen on resume. This was tried and
+reverted.
+
+`hyprland.conf` sets `allow_session_lock_restore = 1` so the lock survives a
+quickshell restart while engaged.
+
 ## Critical QML invariants
 
 ### `FileView.text` is a method
