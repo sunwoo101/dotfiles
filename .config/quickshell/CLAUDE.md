@@ -130,6 +130,8 @@ Thumbnails: PNGs at `$XDG_RUNTIME_DIR/quickshell/workspace-thumbs/<id>.png`, cap
 
 IPC: `qs ipc call launcher show|hide|toggle`. Fuzzy search with frecency boost. Frecency at `~/.cache/quickshell/launcher-frecency.json`. Focus grabbed via 60 ms timer after surface maps.
 
+**Hover selects only on real cursor movement.** Filtering reshuffles delegates under a stationary cursor and Qt sends synthetic hover enters to whichever lands there — a plain `onEntered: selectedIndex = index` makes Enter launch the app under the cursor instead of the top match. `list.hoverAt()` compares the cursor position in list coords to the last one and ignores hover events where it didn't move.
+
 ## Lock
 
 Trigger: `qs ipc call lock lock` (PowerMenu Lock button, `$mainMod CTRL/ALT + L`)

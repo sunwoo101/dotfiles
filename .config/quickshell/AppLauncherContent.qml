@@ -179,6 +179,7 @@ Item {
     function focusSearch() {
         searchInput.text = "";
         list.selectedIndex = 0;
+        list.lastHover = null;
         focusTimer.restart();
     }
     Timer {
@@ -260,6 +261,20 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
 
             property int selectedIndex: 0
+
+            // Last cursor position in list coords. Filtering or scrolling
+            // moves delegates under a stationary cursor and Qt sends
+            // synthetic hover events to whichever one lands there — only
+            // let hover steal the selection when the cursor really moved.
+            // The first event after open just records the position.
+            property var lastHover: null
+            function hoverAt(idx, item, x, y) {
+                var p = item.mapToItem(list, x, y);
+                var moved = lastHover !== null
+                    && (p.x !== lastHover.x || p.y !== lastHover.y);
+                lastHover = p;
+                if (moved) selectedIndex = idx;
+            }
 
             readonly property var filtered: {
                 var fr = root.frecencyData;
@@ -352,7 +367,8 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: list.selectedIndex = index
+                    onEntered: list.hoverAt(index, itemMa, mouseX, mouseY)
+                    onPositionChanged: (mouse) => list.hoverAt(index, itemMa, mouse.x, mouse.y)
                     onClicked: list.launch(modelData)
                 }
             }
