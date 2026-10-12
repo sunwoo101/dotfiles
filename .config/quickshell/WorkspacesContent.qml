@@ -137,7 +137,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        Hyprland.dispatch("workspace " + wsCard.wsId);
+                        Hyprland.dispatch("hl.dsp.focus({ workspace = " + wsCard.wsId + " })");
                         root.requestClose();
                     }
                 }

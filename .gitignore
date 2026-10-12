@@ -8,7 +8,7 @@
 .config/gtk-4.0/gtk.css
 .config/gtk-4.0/settings.ini
 .config/ohmyposh/theme.omp.json
-.config/hypr/conf/colors.conf
+.config/hypr/conf/colors.lua
 home/.gtkrc-2.0
 sddm-theme/dotfiles/theme.conf
 
@@ -19,3 +19,7 @@ sddm-theme/dotfiles/theme.conf
 .config/gtk-3.0/bookmarks
 .config/systemd/user/tiaga-link.service
 .config/systemd/user/default.target.wants/tiaga-link.service
+
+# Hyprland writes an inert hyprlang stub here whenever it's missing; the
+# real config is hyprland.lua.
+.config/hypr/hyprland.conf

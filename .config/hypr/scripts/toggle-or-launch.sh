@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Toggle the per-app special workspace if a window with $class is already
-# open; otherwise launch $cmd. Used by the keybinds in conf/keybinds.conf
+# open; otherwise launch $cmd. Used by the keybinds in conf/keybinds.lua
 # so MOD+<key> behaves the same for every app: hide-when-shown, show-when-
 # hidden, launch-when-not-running.
 set -eu
@@ -25,19 +25,19 @@ open_mon=$(printf '%s' "$mons_json" \
     | head -1)
 
 # Toggle special:$workspace as if the user pressed the keybind from
-# $1 (defaults to focused monitor). togglespecialworkspace always acts
-# on the *focused* monitor, so we briefly focusmonitor to redirect it
+# $1 (defaults to focused monitor). toggle_special always acts
+# on the *focused* monitor, so we briefly focus that monitor to redirect it
 # and restore afterwards. Without this, pressing the keybind from
 # monitor 2 while the overlay is open on monitor 1 just opens a fresh
 # overlay on 2 instead of toggling the existing one off.
 toggle_on() {
     local mon=${1:-$cur_mon}
     if [ -n "$mon" ] && [ -n "$cur_mon" ] && [ "$mon" != "$cur_mon" ]; then
-        hyprctl dispatch focusmonitor "$mon" >/dev/null || true
-        hyprctl dispatch togglespecialworkspace "$workspace" >/dev/null || true
-        hyprctl dispatch focusmonitor "$cur_mon" >/dev/null || true
+        hyprctl dispatch "hl.dsp.focus({ monitor = \"$mon\" })" >/dev/null || true
+        hyprctl dispatch "hl.dsp.workspace.toggle_special(\"$workspace\")" >/dev/null || true
+        hyprctl dispatch "hl.dsp.focus({ monitor = \"$cur_mon\" })" >/dev/null || true
     else
-        hyprctl dispatch togglespecialworkspace "$workspace" >/dev/null || true
+        hyprctl dispatch "hl.dsp.workspace.toggle_special(\"$workspace\")" >/dev/null || true
     fi
 }
 
@@ -50,8 +50,8 @@ toggle_on() {
 reconciled=0
 while read -r addr; do
     [ -z "$addr" ] && continue
-    hyprctl dispatch movetoworkspacesilent \
-        "${target},address:${addr}" >/dev/null || true
+    hyprctl dispatch "hl.dsp.window.move({ workspace = \"$target\", follow = false, window = \"address:$addr\" })" \
+        >/dev/null || true
     reconciled=1
 done < <(hyprctl clients -j \
     | jq -r --arg cls "$class" --arg ws "$target" \

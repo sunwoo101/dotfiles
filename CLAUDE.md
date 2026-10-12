@@ -32,7 +32,7 @@ All written by `render_configs.sh` from `colors.json` + override:
 | `.config/bashrc/colors` | `export PRIMARY=...` |
 | `.config/gtk-{3,4}.0/{gtk.css,settings.ini}` | |
 | `.config/ohmyposh/theme.omp.json` | palette injected into `templates/ohmyposh.omp.json` |
-| `.config/hypr/conf/colors.conf` | `$ACCENT`, `$PRIMARY`, etc.; sourced from `visuals.conf` |
+| `.config/hypr/conf/colors.lua` | Lua table `{ accent, primary, bg, fg, muted, border }`; required by `visuals.lua` |
 | `home/.gtkrc-2.0` | |
 | `sddm-theme/dotfiles/theme.conf` | read by greeter as `config.<key>` |
 
@@ -85,7 +85,7 @@ No literal `#xxxxxx` in configs/templates. All colors resolve through `colors.js
 | kitty | named directives (`background`, `color0..15`, `url_color`) |
 | GTK | `@define-color window_bg_color`, etc. |
 | bash | `$BG`, `$FG`, `$PRIMARY`, etc. |
-| Hyprland | `$ACCENT`, `$PRIMARY`, `$BG`, `$FG`, `$MUTED`, `$BORDER` |
+| Hyprland | `require("conf.colors")` → `colors.accent`, `.primary`, `.bg`, `.fg`, `.muted`, `.border` |
 
 **Known exception:** the 14-element `mochaAccents` array in `shell.qml` is hardcoded hex — represents available options, not the active theme.
 

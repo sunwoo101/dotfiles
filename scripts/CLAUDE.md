@@ -19,7 +19,6 @@ One concern each, runnable standalone. Named `verb_object`.
 | `enable_services.sh` | Enables sddm, NetworkManager, bluetooth, hyprpolkitagent, hyprland-session-cleanup |
 | `hook_bashrc.sh` | Sources dotfiles bashrc from `~/.bashrc` |
 | `session-cleanup.sh` | Daemon run by `hyprland-session-cleanup.service`; blocks on Hyprland socket, stops `graphical-session.target` on exit |
-| `guard-move.sh` | Keybind wrapper: NOPs `swapwindow`/`movetoworkspace` for special-workspace windows |
 | `toggle-or-launch.sh` | Special-workspace toggle with displacement reconciliation and cross-monitor support |
 
 ## apply_palette.py notes

@@ -10,7 +10,7 @@
 #     special is still visible drops it under the overlay and looks
 #     like the window vanished. Instead, on the next `activespecial`
 #     close event, every rogue on that special is moved to the now-
-#     active regular workspace via `movetoworkspacesilent`.
+#     active regular workspace via `hl.dsp.window.move({ follow = false })`.
 #   - Pinned class on a regular workspace: when a class in $pinned
 #     spawns somewhere other than its dedicated special, snap it back
 #     immediately. The `workspace special:X silent` windowrule misses
@@ -19,7 +19,7 @@
 #     rule doesn't fire and the window flashes on workspace 1. This
 #     guard catches that race.
 #
-# Cleanup of pinned/per-app rules in conf/visuals.conf is the other half
+# Cleanup of pinned/per-app rules in conf/visuals.lua is the other half
 # of the contract — windows whose class is in $pinned never get tracked
 # here, so they stay on their dedicated special workspace as intended.
 # `set -u` only — we deliberately do NOT use `set -e`. This is a long-
@@ -30,7 +30,7 @@
 set -u
 
 # When launched via `uwsm app --`, our scope's env is captured from the
-# systemd user manager at creation time. autostart.conf's
+# systemd user manager at creation time. autostart.lua's
 # `import-environment` exec-once runs concurrently with ours, so HIS may
 # not be in the manager env yet when our scope is born — and inherited
 # env is frozen, sleeping in-process won't help. Three sources, in
@@ -109,7 +109,7 @@ log() {
 
 # class -> the special workspace that class is pinned to. Anything in
 # this map is allowed to stay on its special workspace. Keep in sync
-# with the per-app `workspace special:NAME` rules in conf/visuals.conf.
+# with the per-app `workspace special:NAME` rules in conf/visuals.lua.
 declare -A pinned=(
     ["kitty-special"]="special:term"
     ["discord"]="special:discord"
@@ -198,8 +198,8 @@ while :; do
             # in time). Snap it back to its dedicated special silently
             # so it doesn't flash on the active workspace at startup.
             if [ -n "$expected" ] && [ "$expected" != "$workspace" ]; then
-                hyprctl dispatch movetoworkspacesilent \
-                    "${expected},address:0x${addr}" >/dev/null || true
+                hyprctl dispatch "hl.dsp.window.move({ workspace = \"$expected\", follow = false, window = \"address:0x$addr\" })" \
+                    >/dev/null || true
                 log snap-pin "$addr" "$class" "$workspace" "$expected"
                 continue
             fi
@@ -229,7 +229,7 @@ while :; do
             # they fire openwindow with a class that may or may not
             # match the owner. Treating them as rogues both refocuses
             # away from what the user is interacting with AND warps
-            # the cursor to the owner's center (Hyprland's focuswindow
+            # the cursor to the owner's center (Hyprland's focus-window
             # default). Tiled windows are the real rogues we care about
             # (an app launched from elsewhere onto a visible special).
             floating=$(hyprctl clients -j 2>/dev/null \
@@ -248,7 +248,7 @@ while :; do
             # special) until they explicitly choose otherwise.
             owner=${pinned_class_for[$workspace]:-}
             if [ -n "$owner" ]; then
-                hyprctl dispatch focuswindow "class:$owner" \
+                hyprctl dispatch "hl.dsp.focus({ window = \"class:$owner\" })" \
                     >/dev/null || true
                 log refocus-owner "-" "$owner" "$workspace" "$workspace"
             fi
@@ -295,7 +295,7 @@ while :; do
                 active_special[$mon]=$ws
                 log special-show "-" "$mon" "-" "$ws"
                 # If this show was triggered by a pinned window opening
-                # (autostart pop-up), hide it back. togglespecialworkspace
+                # (autostart pop-up), hide it back. toggle_special
                 # acts on the focused monitor; that's where Hyprland just
                 # showed it, so this works even on a multi-monitor setup.
                 pending_ts=${pending_hide[$ws]:-}
@@ -303,7 +303,7 @@ while :; do
                     unset "pending_hide[$ws]"
                 fi
                 if [ -n "$pending_ts" ] && [ $(($(date +%s) - pending_ts)) -le $pending_hide_ttl ]; then
-                    # togglespecialworkspace acts on the focused monitor.
+                    # toggle_special acts on the focused monitor.
                     # The special was shown on $mon, which may not be the
                     # focused monitor at boot — toggling from elsewhere
                     # would teleport/duplicate the overlay and leave
@@ -313,13 +313,13 @@ while :; do
                     cur=$(hyprctl monitors -j 2>/dev/null \
                         | jq -r '.[] | select(.focused == true) | .name')
                     if [ -n "$cur" ] && [ "$cur" != "$mon" ]; then
-                        hyprctl dispatch focusmonitor "$mon" >/dev/null || true
-                        hyprctl dispatch togglespecialworkspace \
-                            "${ws#special:}" >/dev/null || true
-                        hyprctl dispatch focusmonitor "$cur" >/dev/null || true
+                        hyprctl dispatch "hl.dsp.focus({ monitor = \"$mon\" })" >/dev/null || true
+                        hyprctl dispatch "hl.dsp.workspace.toggle_special(\"${ws#special:}\")" \
+                            >/dev/null || true
+                        hyprctl dispatch "hl.dsp.focus({ monitor = \"$cur\" })" >/dev/null || true
                     else
-                        hyprctl dispatch togglespecialworkspace \
-                            "${ws#special:}" >/dev/null || true
+                        hyprctl dispatch "hl.dsp.workspace.toggle_special(\"${ws#special:}\")" \
+                            >/dev/null || true
                     fi
                     log auto-hide "-" "$mon" "$ws" "-"
                 fi
@@ -347,15 +347,15 @@ while :; do
                 focus_addr=""
                 for addr in "${!rogues[@]}"; do
                     if [ "${rogues[$addr]}" = "$prev" ]; then
-                        hyprctl dispatch movetoworkspacesilent \
-                            "${target},address:0x${addr}" >/dev/null || true
+                        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$target\", follow = false, window = \"address:0x$addr\" })" \
+                            >/dev/null || true
                         log disown "$addr" "?" "$prev" "$target"
                         unset "rogues[$addr]"
                         focus_addr=$addr
                     fi
                 done
                 if [ -n "$focus_addr" ]; then
-                    hyprctl dispatch focuswindow "address:0x${focus_addr}" \
+                    hyprctl dispatch "hl.dsp.focus({ window = \"address:0x$focus_addr\" })" \
                         >/dev/null || true
                     log focus "$focus_addr" "?" "$prev" "$target"
                 fi

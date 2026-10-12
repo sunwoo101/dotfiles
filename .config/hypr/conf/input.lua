@@ -1,0 +1,19 @@
+hl.config({
+    input = {
+        kb_layout  = "us",
+        kb_variant = "",
+        kb_model   = "",
+        kb_options = "",
+        kb_rules   = "",
+
+        follow_mouse = 1,
+        sensitivity  = -0.50,
+        repeat_delay = 200,
+
+        scroll_factor = 1,
+    },
+
+    misc = {
+        middle_click_paste = false,
+    },
+})

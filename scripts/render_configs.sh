@@ -236,22 +236,20 @@ os.makedirs(home_dir, exist_ok=True)
 with open(os.path.join(home_dir, ".gtkrc-2.0"), "w") as f:
     f.write(gtkrc2)
 
-# hyprland color include — sourced from hypr/conf/visuals.conf so the
+# hyprland color module — required by hypr/conf/visuals.lua so the
 # focused-window border picks up the active accent on theme switches.
 def hyprland_hex(h):
-    # hyprland color literals: 0x<aa><rr><gg><bb> (alpha first, fully opaque).
+    # hyprland color literals: rgba(<rr><gg><bb><aa>), fully opaque.
     return f"rgba({h.lstrip('#').lower()}ff)"
 
 hypr_dir = os.path.join(base, "hypr", "conf")
 os.makedirs(hypr_dir, exist_ok=True)
-with open(os.path.join(hypr_dir, "colors.conf"), "w") as f:
-    f.write("# generated from colors.json — do not edit\n")
-    f.write(f"$ACCENT  = {hyprland_hex(ui['accent'])}\n")
-    f.write(f"$PRIMARY = {hyprland_hex(ui['primary'])}\n")
-    f.write(f"$BG      = {hyprland_hex(ui['bg'])}\n")
-    f.write(f"$FG      = {hyprland_hex(ui['fg'])}\n")
-    f.write(f"$MUTED   = {hyprland_hex(ui['muted'])}\n")
-    f.write(f"$BORDER  = {hyprland_hex(ui['border'])}\n")
+with open(os.path.join(hypr_dir, "colors.lua"), "w") as f:
+    f.write("-- generated from colors.json — do not edit\n")
+    f.write("return {\n")
+    for key in ("accent", "primary", "bg", "fg", "muted", "border"):
+        f.write(f'    {key:<7} = "{hyprland_hex(ui[key])}",\n')
+    f.write("}\n")
 
 # sddm theme.conf — read by sddm-theme/dotfiles/Main.qml as `config.<key>`
 sddm_theme_dir = os.path.join(repo, "sddm-theme", "dotfiles")

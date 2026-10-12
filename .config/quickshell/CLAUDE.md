@@ -150,7 +150,7 @@ Engaging `ext-session-lock` immediately before that SIGSTOP leaves the lock
 surface mid-commit, and it comes back frozen on resume. This was tried and
 reverted.
 
-`hyprland.conf` sets `allow_session_lock_restore = 1` so the lock survives a
+`hyprland.lua` sets `misc.allow_session_lock_restore = true` so the lock survives a
 quickshell restart while engaged.
 
 ## Critical QML invariants
